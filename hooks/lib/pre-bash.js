@@ -1,5 +1,38 @@
 'use strict';
 /**
+ * Neutralise le corps des heredocs avant toute analyse.
+ *
+ * Indispensable, et pas theorique : un heredoc contenant du texte avec des
+ * apostrophes desynchronise l'appariement des quotes de `stripQuoted`, ce qui
+ * fait apparaitre des motifs absents de la commande reellement executee. Un
+ * script Python redige en francais a suffi a faire bloquer une commande
+ * legitime.
+ *
+ * Le corps d'un heredoc est une donnee, jamais une commande a analyser.
+ */
+function stripHeredocs(cmd) {
+  const text = String(cmd);
+  const re = /<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1/g;
+  let out = '';
+  let cursor = 0;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index < cursor) continue;
+    const tag = m[2];
+    const lineEnd = text.indexOf('\n', m.index + m[0].length);
+    if (lineEnd < 0) break;
+    const bodyStart = lineEnd + 1;
+    // Fin de corps : le tag seul sur sa ligne (indentation toleree pour `<<-`).
+    const rel = text.slice(bodyStart).search(new RegExp('^\\s*' + tag + '\\s*$', 'm'));
+    const bodyEnd = rel < 0 ? text.length : bodyStart + rel;
+    out += text.slice(cursor, bodyStart);
+    cursor = bodyEnd;
+    re.lastIndex = bodyEnd;
+  }
+  return out + text.slice(cursor);
+}
+
+/**
  * PreToolUse / Bash
  *
  *  1. Refus dur : contournement de garde-fou (--no-verify), force-push, pipe-to-shell.
@@ -13,7 +46,7 @@ const { enabled, readState, writeState, deny } = require('./util');
  * qui contient « drop table » ne doit pas déclencher le gate.
  */
 function stripQuoted(cmd) {
-  return String(cmd)
+  return stripHeredocs(cmd)
     .replace(/'(?:[^'\\]|\\.)*'/g, "''")
     .replace(/"(?:[^"\\]|\\.)*"/g, '""');
 }
@@ -100,9 +133,13 @@ function run(input) {
 
   if (!enabled(['standard', 'strict'])) return;
 
+  // Les regles brutes gardent les guillemets, pour voir une requete passee en
+  // argument a un client SQL. Elles doivent en revanche ignorer les corps de
+  // heredoc : c'est de la donnee, pas une commande.
+  const rawNoHeredoc = stripHeredocs(raw);
   const hit =
     DESTRUCTIVE.find((d) => d.re.test(cmd)) ||
-    (TEXT_CONTEXT.test(raw) ? null : RAW_DESTRUCTIVE.find((d) => d.re.test(raw)));
+    (TEXT_CONTEXT.test(rawNoHeredoc) ? null : RAW_DESTRUCTIVE.find((d) => d.re.test(rawNoHeredoc)));
   if (!hit) return;
 
   // Une seule demande de faits par commande identique et par session.
@@ -114,4 +151,4 @@ function run(input) {
   deny(destructiveMsg(hit.what));
 }
 
-module.exports = { run, stripQuoted, DESTRUCTIVE, RAW_DESTRUCTIVE, TEXT_CONTEXT, HARD_DENY };
+module.exports = { run, stripQuoted, stripHeredocs, DESTRUCTIVE, RAW_DESTRUCTIVE, TEXT_CONTEXT, HARD_DENY };

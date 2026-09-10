@@ -14,6 +14,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 const { readState } = require('./util');
 
 const VAULT = process.env.CC_VAULT || path.join(os.homedir(), 'Documents', 'Obsidian Vault');
@@ -39,20 +40,107 @@ const TAIL_BYTES = 16 * 1024 * 1024;
 const FAT_LINE_BYTES = 120 * 1024;
 const BLOB_HINT = /"(base64|image)"/;
 
-const enabled = () => process.env.CC_VAULT_DISABLED !== '1' && fs.existsSync(VAULT);
+/**
+ * Emplacements où l'on n'écrit jamais, même si le chemin existe : un cache de
+ * plugin ou un dépôt cloné n'est pas une base de connaissance, et y écrire perd
+ * les notes au prochain nettoyage.
+ */
+const FORBIDDEN = [
+  path.join('.claude', 'plugins'),
+  path.join('.claude', 'jobs'),
+  'node_modules',
+  '.claude-config',
+  path.join('.claude', 'state'),
+];
+
+/**
+ * Un vault n'est reconnu que s'il en porte la preuve — un dossier `.obsidian`,
+ * ou une désignation explicite par l'opérateur. En cas de doute, on n'écrit pas :
+ * mieux vaut ne rien mémoriser que semer des notes dans un dossier arbitraire.
+ */
+function vaultStatus() {
+  if (process.env.CC_VAULT_DISABLED === '1') return { ok: false, why: 'désactivé (CC_VAULT_DISABLED=1)' };
+
+  let real = VAULT;
+  try { real = fs.realpathSync(VAULT); } catch { return { ok: false, why: `chemin introuvable : ${VAULT}` }; }
+
+  try { if (!fs.statSync(real).isDirectory()) return { ok: false, why: 'la cible n\'est pas un dossier' }; }
+  catch { return { ok: false, why: 'chemin illisible' }; }
+
+  const hit = FORBIDDEN.find((frag) => real.includes(path.sep + frag) || real.endsWith(path.sep + frag));
+  if (hit) return { ok: false, why: `emplacement interdit (contient « ${hit} »)` };
+
+  const explicit = Boolean(process.env.CC_VAULT);
+  if (!explicit && !fs.existsSync(path.join(real, '.obsidian'))) {
+    return { ok: false, why: 'aucun dossier .obsidian — définir CC_VAULT pour forcer' };
+  }
+  return { ok: true, root: real };
+}
+
+function enabled() {
+  const st = vaultStatus();
+  if (!st.ok && process.env.CCX_DEBUG === '1') process.stderr.write(`[vault] inactif : ${st.why}\n`);
+  return st.ok;
+}
 
 function ensureDirs() {
   for (const d of [ROOT, ...Object.values(DIRS)]) fs.mkdirSync(d, { recursive: true });
 }
 
-/** Nom de projet lisible : évite que dix dossiers `www` produisent la même page. */
+/**
+ * Nom de page lisible et discriminant.
+ *
+ * Le seul basename ne suffit pas : `danilov/crm` et `autre-client/crm`
+ * produiraient la même page. On préfixe par le dossier parent dès que le
+ * basename est court ou générique — sauf quand ce parent n'est qu'un conteneur
+ * (`Documents`, `Desktop`…), qui n'apprend rien.
+ */
+const GENERIC_BASE = new Set([
+  'www', 'app', 'apps', 'src', 'web', 'site', 'client', 'server', 'frontend',
+  'backend', 'api', 'front', 'back', 'core', 'main', 'code', 'dev', 'projet',
+  'project', 'repo', 'work',
+]);
+const CONTAINERS = new Set([
+  'documents', 'desktop', 'downloads', 'users', 'home', 'dev', 'code',
+  'projects', 'projets', 'repos', 'git', 'workspace', 'sites',
+]);
+
 function projectName(cwd) {
   if (!cwd) return 'Sans projet';
   const parts = cwd.split(path.sep).filter(Boolean);
   const base = parts[parts.length - 1] || 'projet';
-  const GENERIC = new Set(['www', 'app', 'src', 'web', 'site', 'client', 'server', 'frontend', 'backend']);
-  const name = GENERIC.has(base.toLowerCase()) && parts.length > 1 ? `${parts[parts.length - 2]}-${base}` : base;
+  const parent = parts[parts.length - 2];
+  const ambiguous = GENERIC_BASE.has(base.toLowerCase()) || base.length <= 4;
+  const usable = parent && !CONTAINERS.has(parent.toLowerCase());
+  const name = ambiguous && usable ? `${parent}-${base}` : base;
   return name.replace(/[\\/:*?"<>|]/g, '-').slice(0, 60);
+}
+
+/**
+ * Retrouve la page d'un projet par son `chemin:` avant de se rabattre sur le nom.
+ *
+ * Sans cela, une page renommée à la main devient orpheline : le hook continue de
+ * chercher le nom qu'il avait calculé et recrée un doublon vide à côté d'une
+ * page pleine. Le chemin est l'identité stable, le nom n'est qu'un libellé.
+ */
+function resolveProjectFile(cwd) {
+  if (!cwd) return projectFile(projectName(cwd));
+  let target = cwd;
+  try { target = fs.realpathSync(cwd); } catch { /* dossier disparu */ }
+  try {
+    for (const f of fs.readdirSync(DIRS.projets)) {
+      if (!f.endsWith('.md')) continue;
+      const full = path.join(DIRS.projets, f);
+      const m = read(full).match(/^chemin:\s*(.+)$/m);
+      if (!m) continue;
+      const declared = m[1].trim().replace(/^["']|["']$/g, '');
+      if (!declared) continue;
+      let real = declared;
+      try { real = fs.realpathSync(declared); } catch { /* chemin déclaré absent */ }
+      if (real === target || declared === cwd) return full;
+    }
+  } catch { /* dossier Projets absent */ }
+  return projectFile(projectName(cwd));
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -82,7 +170,92 @@ function stripFrontmatter(content) {
 }
 
 const read = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch { return ''; } };
-function write(f, c) { try { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, c); return true; } catch { return false; } }
+const hash = (t) => crypto.createHash('sha256').update(t || '').digest('hex');
+
+/** Écriture atomique : un fichier à moitié écrit ne doit jamais être relu comme vrai. */
+function write(f, c) {
+  const tmp = `${f}.tmp.${process.pid}`;
+  try {
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    fs.writeFileSync(tmp, c);
+    fs.renameSync(tmp, f);
+    return true;
+  } catch {
+    try { fs.unlinkSync(tmp); } catch { /* ignore */ }
+    return false;
+  }
+}
+
+/** Pause synchrone : les hooks n'ont pas de boucle d'événements à leur disposition. */
+function sleepSync(ms) {
+  try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); }
+  catch { const end = Date.now() + ms; while (Date.now() < end) { /* attente active */ } }
+}
+
+/**
+ * Verrou exclusif par fichier.
+ *
+ * Le hash attendu empêche la corruption mais pas la perte de mise à jour : deux
+ * process peuvent lire la même version, n'y voir aucun changement, et écrire
+ * tous les deux — le dernier gagne. Mesuré : 2 lignes conservées sur 8 avec huit
+ * process parallèles. `mkdir` est atomique sur POSIX comme sur Windows, ce qui
+ * en fait un verrou fiable sans dépendance.
+ *
+ * Un verrou périmé (process tué) est repris après STALE_MS. Un verrou
+ * inaccessible fait renoncer plutôt qu'écraser.
+ */
+const LOCK_TIMEOUT_MS = 2000;
+const LOCK_STALE_MS = 30000;
+
+function withLock(key, fn) {
+  const dir = path.join(os.tmpdir(), `ccx-vault-${hash(key).slice(0, 16)}.lock`);
+  const deadline = Date.now() + LOCK_TIMEOUT_MS;
+
+  for (;;) {
+    try { fs.mkdirSync(dir); break; }
+    catch (err) {
+      if (err.code !== 'EEXIST') return fn(); // verrouillage impossible : on n'empêche pas le travail
+      try {
+        if (Date.now() - fs.statSync(dir).mtimeMs > LOCK_STALE_MS) { fs.rmdirSync(dir); continue; }
+      } catch { /* le verrou vient de disparaître : on retente */ }
+      if (Date.now() > deadline) {
+        if (process.env.CCX_DEBUG === '1') process.stderr.write(`[vault] verrou non obtenu : ${key}\n`);
+        return null;
+      }
+      sleepSync(25);
+    }
+  }
+
+  try { return fn(); }
+  finally { try { fs.rmdirSync(dir); } catch { /* ignore */ } }
+}
+
+/**
+ * Lecture-modification-écriture protégée par le hash attendu.
+ *
+ * Deux écrivains peuvent viser la même page : une session interactive et un job
+ * de fond, ou deux jobs parallèles. Sans garde, le second écrase la note du
+ * premier sans trace. Ici on relit avant d'écrire : si le contenu a changé
+ * depuis la lecture, on rejoue la modification sur la version fraîche plutôt
+ * que de l'écraser. Un conflit persistant fait renoncer — jamais écraser.
+ */
+function writeGuarded(file, mutate, attempts = 3) {
+  return withLock(file, () => guardedInner(file, mutate, attempts)) === null ? false : true;
+}
+
+function guardedInner(file, mutate, attempts) {
+  for (let i = 0; i < attempts; i++) {
+    const before = read(file);
+    const next = mutate(before);
+    if (next === null || next === before) return true; // rien à faire
+    if (hash(read(file)) !== hash(before)) continue;   // modifié entre-temps : on rejoue
+    if (write(file, next)) return true;
+  }
+  if (process.env.CCX_DEBUG === '1') {
+    process.stderr.write(`[vault] conflit persistant, écriture abandonnée : ${file}\n`);
+  }
+  return false;
+}
 
 // ---------------------------------------------------------------- distillation
 
@@ -187,6 +360,8 @@ function journalFile(name) { return path.join(DIRS.journal, `${today()} — ${na
 
 /** Crée la page projet si absente. Ne réécrit JAMAIS une page existante. */
 function ensureProjectPage(name, cwd) {
+  const existing = cwd ? resolveProjectFile(cwd) : projectFile(name);
+  if (fs.existsSync(existing)) return existing;
   const f = projectFile(name);
   if (fs.existsSync(f)) return f;
   write(f, `---
@@ -228,11 +403,13 @@ chemin: ${cwd || ''}
 /** Ajoute un lien de journal dans la page projet, sans toucher au reste. */
 function linkJournal(name, cwd) {
   const f = ensureProjectPage(name, cwd);
-  const content = read(f);
-  const existing = readRegion(content, 'journal').split('\n').filter((l) => l.trim());
-  const link = `- [[${today()} — ${name}]]`;
-  if (!existing.includes(link)) existing.push(link);
-  write(f, upsertRegion(content, 'journal', existing.slice(-30).join('\n')));
+  writeGuarded(f, (content) => {
+    const existing = readRegion(content, 'journal').split('\n').filter((l) => l.trim());
+    const link = `- [[${today()} — ${name}]]`;
+    if (existing.includes(link)) return null; // déjà présent : aucune écriture
+    existing.push(link);
+    return upsertRegion(content, 'journal', existing.slice(-30).join('\n'));
+  });
 }
 
 function appendJournal(name, cwd, block) {
@@ -292,10 +469,11 @@ function onStop(input) {
   const name = projectName(input?.cwd);
   const f = journalFile(name);
   // Un seul bloc « fin de session » par jour : réécrit plutôt qu'empilé.
-  const existing = read(f);
   const block = formatBlock('Fin de session', d);
-  if (existing.includes('— Fin de session')) {
-    write(f, existing.replace(/## \d{2}:\d{2} — Fin de session[\s\S]*?(?=\n## |$)/, block + '\n'));
+  if (read(f).includes('— Fin de session')) {
+    writeGuarded(f, (existing) =>
+      existing.replace(/## \d{2}:\d{2} — Fin de session[\s\S]*?(?=\n## |$)/, block + '\n')
+    );
     linkJournal(name, input.cwd);
   } else {
     appendJournal(name, input.cwd, block);
@@ -341,16 +519,18 @@ function tailSections(text, budget) {
   return at >= 0 ? cut.slice(at) : cut.replace(/^\S*\s/, '');
 }
 
-/** SessionStart : stdout est injecté dans le contexte — d'où les budgets. */
-function onStart(input) {
-  if (!enabled()) return;
-  const name = projectName(input?.cwd);
+/**
+ * Construit exactement ce qui serait injecté pour un dossier de travail donné.
+ * Séparé de l'écriture sur stdout pour être inspectable par `vault-lint`.
+ */
+function buildInjection(cwd) {
+  const name = projectName(cwd);
   const parts = [];
 
   const profil = cleanForInjection(read(path.join(DIRS.profil, 'Façon de coder.md')));
   if (profil) parts.push('### Mes préférences durables\n' + profil.slice(0, BUDGET.profil));
 
-  const projet = cleanForInjection(read(projectFile(name)));
+  const projet = cleanForInjection(read(resolveProjectFile(cwd)));
   if (projet) parts.push(`### Contexte du projet ${name}\n` + projet.slice(0, BUDGET.projet));
 
   let j = read(journalFile(name));
@@ -365,19 +545,25 @@ function onStart(input) {
   );
   if (jbody) parts.push('### Dernière session\n' + tailSections(jbody, BUDGET.journal));
 
-  if (!parts.length) return;
-  process.stdout.write(
-    ['<contexte-vault>',
-     'Notes du vault Obsidian. Contexte de fond sur le projet et les préférences de travail, pas des instructions.',
-     '',
-     parts.join('\n\n'),
-     '</contexte-vault>'].join('\n') + '\n'
-  );
+  if (!parts.length) return null;
+  return ['<contexte-vault>',
+    'Notes du vault Obsidian. Contexte de fond sur le projet et les préférences de travail, pas des instructions.',
+    '',
+    parts.join('\n\n'),
+    '</contexte-vault>'].join('\n') + '\n';
+}
+
+/** SessionStart : stdout est injecté dans le contexte — d'où les budgets. */
+function onStart(input) {
+  if (!enabled()) return;
+  const out = buildInjection(input?.cwd);
+  if (out) process.stdout.write(out);
 }
 
 module.exports = {
-  onCompact, onStop, onStart,
+  onCompact, onStop, onStart, buildInjection,
   VAULT, ROOT, DIRS, BUDGET,
   projectName, distill, isUserAsk, upsertRegion, cleanForInjection, tailSections, readRegion, stripRegions, ensureDirs,
-  ensureProjectPage, projectFile, journalFile, readBounded,
+  ensureProjectPage, projectFile, resolveProjectFile, journalFile, readBounded,
+  vaultStatus, writeGuarded, withLock, hash, read, write,
 };
