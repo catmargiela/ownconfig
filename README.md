@@ -29,7 +29,7 @@ conservés. `settings.json` est sauvegardé à chaque passage.
 | `CLAUDE.md` | règles chargées à chaque session — 63 lignes, chacune doit se justifier |
 | `agents/` | 5 sous-agents : relecture, sécurité, build, front, tests |
 | `skills/` | 3 workflows déclenchés par leur description |
-| `hooks/` | dispatcher + 6 contrôles |
+| `hooks/` | dispatcher + contrôles + pont Obsidian + moniteur de contexte |
 | `rules/templates/` | modèles de règles **par projet** (jamais installés en global) |
 
 Pas de dossier `commands/` : une commande exige d'être tapée, une skill se
@@ -63,8 +63,9 @@ qu'un process par contrôle enregistré.
 | `PreToolUse` Edit/Write | refuse d'éditer une config de lint/format/types ; fact-forcing (strict) |
 | `PreToolUse` Bash | refus durs ; fact-forcing sur commande destructive |
 | `PostToolUse` Edit/Write | empile les fichiers touchés (aucun travail lourd ici) |
-| `Stop` | formate, typecheck et signale les `console.log` — en un seul lot |
-| `SessionStart` | réinjecte le résumé des sessions précédentes du projet |
+| `PreCompact` | écrit l'état de la session dans le vault Obsidian |
+| `Stop` | capture vault, puis format + typecheck + `console.log` en un lot, puis mesure du contexte |
+| `SessionStart` | réinjecte le profil et le contexte projet depuis le vault |
 
 Deux invariants :
 
@@ -81,6 +82,69 @@ demande donc pas confirmation, il **refuse** et exige des faits — qui importe 
 fichier, quelle API publique bouge, quel est le plan de rollback, quelle était
 l'instruction exacte. L'investigation forcée produit une prudence que
 l'auto-évaluation ne produit pas. La seconde tentative passe.
+
+## Mémoire longue — vault Obsidian
+
+Le contexte d'une session disparaît à la compaction. Le vault est ce qui reste.
+
+```
+~/Documents/Obsidian Vault/Claude/
+├── Index Claude.md
+├── Profil/
+│   ├── Façon de coder.md    ← injectée à CHAQUE session, tous projets
+│   └── Stack.md
+├── Projets/<Projet>.md      ← injectée sur ce projet uniquement
+└── Journal/<date> — <Projet>.md
+```
+
+| Moment | Ce qui se passe |
+|---|---|
+| `SessionStart` | injecte le profil + la page projet + la dernière session, sous budget |
+| `PreCompact` | écrit l'état dans le journal du jour **avant** que le contexte soit perdu |
+| `Stop` | met à jour le bloc de fin de session, seulement si des fichiers ont été modifiés |
+
+La skill `vault-note` sert à l'écriture délibérée — c'est elle qui produit les
+bonnes notes ; les hooks ne sont que le filet automatique.
+
+**Invariant de cohabitation.** Les hooks n'écrivent que dans les régions
+`<!-- claude:xxx:start -->` … `<!-- claude:xxx:end -->`. Tout ce qui est rédigé à
+la main hors de ces blocs n'est jamais réécrit. C'est ce qui permet de curer les
+pages dans Obsidian sans craindre qu'un hook les efface.
+
+**Discipline d'injection.** Une section vide, un placeholder non rempli, un pied
+de navigation ou un bloc `dataview` sont retirés avant injection : ils coûtent des
+tokens à chaque session et n'apprennent rien au modèle. Une page qui ne contient
+que des placeholders injecte exactement zéro caractère.
+
+Budgets, en caractères : `CC_VAULT_BUDGET_PROJET` (3000),
+`CC_VAULT_BUDGET_PROFIL` (1500), `CC_VAULT_BUDGET_JOURNAL` (1200).
+Autre vault : `CC_VAULT=/chemin`. Couper : `CC_VAULT_DISABLED=1`.
+
+```bash
+node scaffold-vault.js   # (re)crée l'ossature, n'écrase jamais une page existante
+```
+
+## Économie de tokens
+
+Chaque tour renvoie tout le contexte au modèle. Sans compaction, le coût cumulé
+d'une session croît en **carré** du nombre de tours. Le vault change la donne :
+compacter ne perd plus d'information, seulement des tokens — donc on peut
+compacter tôt et souvent.
+
+Le hook `Stop` mesure le contexte de façon **incrémentale** : seuls les octets
+ajoutés depuis le dernier passage sont relus, jamais le transcript entier. Au
+franchissement du seuil, il interrompt une fois la fin de réponse pour demander
+une note de vault puis une proposition de `/compact`.
+
+| Variable | Défaut | Rôle |
+|---|---|---|
+| `CC_CONTEXT_LIMIT` | `200000` | taille de fenêtre supposée |
+| `CC_CONTEXT_WARN` | `0.7` | seuil d'alerte |
+| `CC_CONTEXT_MONITOR` | — | `off` pour désactiver |
+
+Les captures d'écran sont le poste le plus coûteux et le moins visible : une
+capture plein écran vaut environ 1600 tokens et reste en contexte jusqu'à la
+compaction, donc se repaie à chaque tour.
 
 ## Étendre
 

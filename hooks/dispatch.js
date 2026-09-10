@@ -10,15 +10,18 @@
  * Contrat : un hook ne casse JAMAIS un appel d'outil. Toute erreur inattendue
  * se termine en sortie 0 (autorisé). Seul un refus délibéré sort en 2.
  *
- *   node dispatch.js <pre-edit|pre-bash|post-edit|stop|session-start>
+ *   node dispatch.js <pre-edit|pre-bash|post-edit|pre-compact|stop|session-start>
  */
 
 const EVENTS = {
   'pre-edit': ['./lib/pre-edit'],
   'pre-bash': ['./lib/pre-bash'],
   'post-edit': ['./lib/post-edit'],
-  'stop': ['./lib/memory#onStop', './lib/stop-quality'],
-  'session-start': ['./lib/memory#onStart'],
+  // La capture vault passe AVANT les gates : ce qui doit être mémorisé l'est,
+  // même si un gate interrompt ensuite la fin de réponse.
+  'pre-compact': ['./lib/vault#onCompact'],
+  'stop': ['./lib/vault#onStop', './lib/stop-quality', './lib/context-monitor'],
+  'session-start': ['./lib/vault#onStart'],
 };
 
 const event = process.argv[2];

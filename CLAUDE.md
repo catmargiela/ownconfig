@@ -56,8 +56,25 @@ Lancer les agents indépendants en parallèle dans un seul message.
 - Ne jamais `push --force` ni committer sur `main` sans demande explicite.
 - Ne jamais `git add -A` à l'aveugle : vérifier `git status` d'abord.
 
-## Contexte
+## Mémoire longue — vault Obsidian
 
-Éviter les 20 % finaux de la fenêtre de contexte sur un refactor multi-fichiers.
-Sur une session longue, préférer déléguer une recherche bruyante à un sous-agent
-plutôt que de charger les fichiers ici.
+`~/Documents/Obsidian Vault/Claude/` est la mémoire qui survit aux compactions.
+Le contexte du projet et mes préférences y sont réinjectés à chaque session.
+
+Y écrire (skill `vault-note`) quand une décision structurante est prise, quand je
+corrige une manière de faire, ou avant de compacter. Ne jamais réécrire une page
+entière avec `Write` : lire, puis `Edit` la section visée. Les blocs
+`<!-- claude:… -->` sont gérés par les hooks, le reste est à moi.
+
+## Contexte et tokens
+
+Chaque tour renvoie tout le contexte : un contexte deux fois plus gros coûte deux
+fois plus cher à chaque tour suivant.
+
+- Éviter les 20 % finaux de la fenêtre sur un refactor multi-fichiers.
+- Déléguer une recherche bruyante à un sous-agent plutôt que de charger les
+  fichiers ici — le sous-agent garde le bruit hors de ce contexte.
+- Les captures d'écran restent en contexte jusqu'à la compaction et se repaient à
+  chaque tour. N'en prendre que si elle sert à une décision, pas pour confirmer.
+- Quand le hook signale le seuil de contexte : écrire dans le vault, puis me
+  proposer `/compact`. Ne pas compacter sans mon accord.

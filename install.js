@@ -30,6 +30,7 @@ const HOOK_ENTRIES = [
   { event: 'PreToolUse', matcher: 'Edit|Write|MultiEdit', arg: 'pre-edit', timeout: 10 },
   { event: 'PreToolUse', matcher: 'Bash', arg: 'pre-bash', timeout: 10 },
   { event: 'PostToolUse', matcher: 'Edit|Write|MultiEdit', arg: 'post-edit', timeout: 5 },
+  { event: 'PreCompact', matcher: 'manual|auto', arg: 'pre-compact', timeout: 30 },
   { event: 'Stop', matcher: undefined, arg: 'stop', timeout: 60 },
   { event: 'SessionStart', matcher: 'startup|resume|clear', arg: 'session-start', timeout: 10 },
 ];
@@ -99,7 +100,13 @@ function main() {
   if (UNINSTALL) targets.forEach(([, d]) => unlink(d));
   else targets.forEach(([s, d]) => link(s, d));
 
-  // --- 2. settings.json ---
+  // --- 2. Ossature du vault Obsidian ---
+  if (!UNINSTALL && !DRY) {
+    try { require('./scaffold-vault.js'); }
+    catch (e) { console.log('        ! vault non initialisé :', e.message); }
+  }
+
+  // --- 3. settings.json ---
   let settings = {};
   if (fs.existsSync(SETTINGS)) {
     const raw = fs.readFileSync(SETTINGS, 'utf8');
@@ -129,7 +136,7 @@ function main() {
   const foreign = JSON.stringify(settings.hooks).length;
   if (!DRY) fs.writeFileSync(SETTINGS, JSON.stringify(settings, null, 2) + '\n');
 
-  // --- 3. Compte rendu ---
+  // --- 4. Compte rendu ---
   const others = Object.values(settings.hooks).flat()
     .flatMap((g) => g.hooks || [])
     .filter((h) => !String(h.command || '').includes(MARKER)).length;
