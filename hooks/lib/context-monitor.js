@@ -17,8 +17,43 @@
 const fs = require('fs');
 const { readState, writeState } = require('./util');
 
-const LIMIT = Number(process.env.CC_CONTEXT_LIMIT) || 200000;
+/**
+ * Taille de fenêtre : déduite du modèle configuré, jamais supposée.
+ * Un dénominateur codé en dur produit une fausse alerte à 96 % alors que la
+ * fenêtre réelle est cinq fois plus grande.
+ */
+function resolveLimit() {
+  const forced = Number(process.env.CC_CONTEXT_LIMIT);
+  if (forced > 0) return forced;
+
+  const candidates = [process.env.ANTHROPIC_MODEL, process.env.CLAUDE_MODEL];
+  try {
+    const os = require('os'), path = require('path');
+    for (const f of ['settings.local.json', 'settings.json']) {
+      try {
+        const raw = fs.readFileSync(path.join(os.homedir(), '.claude', f), 'utf8');
+        candidates.push(JSON.parse(raw).model);
+      } catch { /* fichier absent ou illisible */ }
+    }
+  } catch { /* ignore */ }
+
+  const model = candidates.find(Boolean);
+  if (model && /\[1m\]|-1m\b|1m\b/i.test(String(model))) return 1000000;
+  return 200000; // défaut prudent : sur-alerte plutôt que de rester muet
+}
+
+const LIMIT = resolveLimit();
 const WARN_AT = Number(process.env.CC_CONTEXT_WARN) || 0.7;
+
+/**
+ * Seuil absolu, indépendant de la fenêtre.
+ *
+ * Le pourcentage répond à « suis-je près du mur ? » — la compaction automatique
+ * s'en charge déjà. Ce qui coûte réellement, c'est le nombre de tokens renvoyés
+ * à CHAQUE tour : sur une fenêtre de 1M, tourner à 400k est ruineux bien avant
+ * d'être dangereux. D'où un plafond en tokens, pas en proportion.
+ */
+const SOFT_CAP = Number(process.env.CC_CONTEXT_SOFT) || 150000;
 const IMAGE_TOKENS = 1600; // ordre de grandeur d'une capture d'écran plein écran
 const MAX_DELTA = 64 * 1024 * 1024; // garde-fou si le transcript explose d'un coup
 
@@ -83,9 +118,15 @@ function measure(transcriptPath, state) {
   return { offset: offset + length, tokens: Math.round(tokens), images, warned: state.warned || [] };
 }
 
-function advice(pct, tokens, images) {
+function advice(tokens, images, reason) {
+  const k = (n) => (n >= 1000000 ? `${+(n / 1000000).toFixed(1)}M` : `${Math.round(n / 1000)}k`);
   const lines = [
-    `[Contexte] ~${Math.round(tokens / 1000)}k tokens estimés, soit ~${Math.round(pct * 100)} % de la fenêtre.`,
+    `[Contexte] ~${k(tokens)} tokens estimés sur une fenêtre de ${k(LIMIT)} ` +
+      `(~${Math.round((100 * tokens) / LIMIT)} %).`,
+    reason === 'window'
+      ? "Proche de la limite de la fenêtre : la compaction devient inévitable."
+      : `Au-delà de ${k(SOFT_CAP)} tokens, chaque tour renvoie tout ce contexte au modèle — ` +
+        `c'est le coût, pas le risque, qui justifie de compacter.`,
     '',
   ];
   if (images >= 3) {
@@ -118,16 +159,18 @@ function run(input) {
   writeState(input.session_id, 'context', next);
 
   const pct = next.tokens / LIMIT;
-  if (pct < WARN_AT) return;
+  const overWindow = pct >= WARN_AT;
+  const overSoft = next.tokens >= SOFT_CAP;
+  if (!overWindow && !overSoft) return;
 
-  // Un seul avertissement par palier : le bruit répété serait ignoré.
-  const step = pct >= 0.85 ? 'haut' : 'seuil';
-  if ((next.warned || []).includes(step)) return;
-  next.warned = [...(next.warned || []), step];
+  // Un seul avertissement par motif : un rappel répété serait ignoré.
+  const reason = overWindow ? 'window' : 'cost';
+  if ((next.warned || []).includes(reason)) return;
+  next.warned = [...(next.warned || []), reason];
   writeState(input.session_id, 'context', next);
 
-  process.stderr.write(advice(pct, next.tokens, next.images) + '\n');
+  process.stderr.write(advice(next.tokens, next.images, reason) + '\n');
   process.exit(2);
 }
 
-module.exports = { run, measure, estimateLine, estimateBlock, LIMIT, WARN_AT };
+module.exports = { run, measure, estimateLine, estimateBlock, resolveLimit, advice, LIMIT, WARN_AT, SOFT_CAP };

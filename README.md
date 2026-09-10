@@ -136,11 +136,26 @@ ajoutés depuis le dernier passage sont relus, jamais le transcript entier. Au
 franchissement du seuil, il interrompt une fois la fin de réponse pour demander
 une note de vault puis une proposition de `/compact`.
 
-| Variable | Défaut | Rôle |
+Deux seuils, pour deux questions différentes :
+
+| Variable | Défaut | Question à laquelle il répond |
 |---|---|---|
-| `CC_CONTEXT_LIMIT` | `200000` | taille de fenêtre supposée |
-| `CC_CONTEXT_WARN` | `0.7` | seuil d'alerte |
+| `CC_CONTEXT_SOFT` | `150000` | **combien ça coûte** — chaque tour renvoie ce contexte entier |
+| `CC_CONTEXT_WARN` | `0.7` | **suis-je près du mur** — fraction de la fenêtre |
+| `CC_CONTEXT_LIMIT` | déduit du modèle | forcer la taille de fenêtre |
 | `CC_CONTEXT_MONITOR` | — | `off` pour désactiver |
+
+Le seuil absolu est celui qui compte au quotidien. Sur une fenêtre de 1M, tourner
+à 400k tokens est ruineux bien avant d'être dangereux : le pourcentage ne dirait
+rien, alors que le coût par tour a doublé. La compaction automatique se charge
+déjà du mur.
+
+La taille de fenêtre est **déduite du modèle** (`model` dans `settings.json`, ou
+`ANTHROPIC_MODEL`) : `opus[1m]` donne 1M, sinon 200k par défaut. Une fenêtre codée
+en dur produisait une alerte à 96 % alors que le contexte était à 19 %.
+
+Le message d'alerte affiche toujours le dénominateur — `~193k sur 1M` — pour
+pouvoir être recoupé avec `/context` d'un coup d'œil.
 
 Les captures d'écran sont le poste le plus coûteux et le moins visible : une
 capture plein écran vaut environ 1600 tokens et reste en contexte jusqu'à la
