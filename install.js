@@ -32,7 +32,10 @@ const HOOK_ENTRIES = [
   { event: 'PostToolUse', matcher: 'Edit|Write|MultiEdit', arg: 'post-edit', timeout: 5 },
   { event: 'PreCompact', matcher: 'manual|auto', arg: 'pre-compact', timeout: 30 },
   { event: 'Stop', matcher: undefined, arg: 'stop', timeout: 60 },
-  { event: 'SessionStart', matcher: 'startup|resume|clear', arg: 'session-start', timeout: 10 },
+  // `compact` et `fork` sont des sources valides de SessionStart : les omettre
+  // fait rater la ré-injection juste après une compaction — le moment précis où
+  // le contexte vient d'être perdu.
+  { event: 'SessionStart', matcher: 'startup|resume|clear|compact|fork', arg: 'session-start', timeout: 10 },
 ];
 
 /** Lien symbolique : la source de vérité reste le dépôt, les édits sont immédiats. */
