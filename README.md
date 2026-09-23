@@ -106,6 +106,12 @@ fichier, quelle API publique bouge, quel est le plan de rollback, quelle était
 l'instruction exacte. L'investigation forcée produit une prudence que
 l'auto-évaluation ne produit pas. La seconde tentative passe.
 
+Le contenu des chaînes citées est neutralisé avant l'analyse (un message de
+commit qui contient « drop table » ne déclenche rien). Cette lecture suit les
+règles réelles du shell : entre apostrophes, rien n'est échappé — `'a\'` se ferme
+au second `'` — donc `ls 'a\' ; rm -rf x ; echo '` laisse bien voir le `rm -rf`.
+Une quote jamais refermée est analysée telle quelle, par prudence.
+
 ### Fichiers compagnons
 
 Certains changements vont par paires : un module et sa démo, un schéma et sa
@@ -262,8 +268,21 @@ commentaire, pour qui relit l'appel.
   échec sur une commande dont le processeur ne gère pas les échecs passe par le
   processeur générique.
 
+- **Aucun caractère de contrôle, même entre apostrophes.** La commande réécrite
+  garde l'originale en commentaire (`# 'git log'`) pour que la validation et le
+  classifieur voient ce qui s'exécute. Un commentaire shell s'arrête au premier
+  retour à la ligne physique : un `\n` caché dans un argument cité ferait sortir
+  la suite du commentaire en commande libre. Tout caractère de contrôle (`\n`,
+  `\r`, NUL…) et les séparateurs de ligne Unicode (NEL, LS, PS) rendent donc la
+  commande inéligible, et la réécriture refuse de toute façon une entrée
+  multi-ligne (double barrière, test de non-régression).
+
 Une sortie compressée se termine par une ligne :
 `[ccx: sortie compressée 12630→1159 car. (git) — CCX_RAW=1 git log pour la sortie brute]`.
+
+Gains mesurés sur ce dépôt : `git log` 12 630 → 1 159 caractères (−91 %),
+`rg -n function hooks` −56 %, `find . -type f` −45 %. Les diffs gardent toutes
+leurs lignes par choix : sous 20 % de gain, la sortie brute est rendue.
 
 **Contournements.** `CCX_RAW=1 <commande>` : sortie brute pour cette commande.
 `CCX_COMPRESS=off` : compression coupée. Profil `minimal` ou `CCX_DISABLED=1` :
