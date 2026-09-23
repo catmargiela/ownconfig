@@ -145,14 +145,41 @@ Le contexte d'une session disparaît à la compaction. Le vault est ce qui reste
 │   ├── Façon de coder.md    ← injectée à CHAQUE session, tous projets
 │   └── Stack.md
 ├── Projets/<Projet>.md      ← injectée sur ce projet uniquement
-└── Journal/<date> — <Projet>.md
+├── Journal/<date> — <Projet>.md
+└── Tableau de bord.md       ← dernières sessions + bilan de la compression
 ```
 
 | Moment | Ce qui se passe |
 |---|---|
-| `SessionStart` | injecte le profil + la page projet + la dernière session, sous budget |
+| `SessionStart` | injecte le profil + la page projet + les derniers résultats, sous budget |
 | `PreCompact` | écrit l'état dans le journal du jour **avant** que le contexte soit perdu |
-| `Stop` | met à jour le bloc de fin de session, seulement si des fichiers ont été modifiés |
+| `Stop` | met à jour le bloc de la session (dès la première édition), la page projet et le tableau de bord |
+
+**Un bloc par session.** Chaque session a son propre bloc dans le journal du jour
+(`<!-- claude:session:<id> -->`), mis à jour sur place à chaque tour au lieu
+d'empiler des « fin de session ». Rendu en callouts Obsidian natifs, sans plugin :
+
+```
+## 10:30–10:51 — feat/journal
+> [!summary] Résultat           ← la ligne `result:` de la dernière réponse
+> [!question]- Demandé (N)       ← seulement les demandes tapées
+> [!info]- Commits et PR         ← liens GitHub vers commits et PR créés
+> [!todo]- Fichiers touchés (N)  ← fichiers du dépôt, « +N hors projet »
+> [!warning]- Erreurs (N) · M refus de garde-fous
+> [!quote]- Dernier état         ← extrait, mise en forme et sauts de ligne gardés
+```
+
+Ce qui est filtré : messages d'agents et de hooks, rappels système, corps de
+commandes slash injectés, interruptions ; chemins temporaires et fichiers
+d'autres dépôts ; refus volontaires des garde-fous (comptés, pas listés) et bruit
+d'outils. Le frontmatter du journal porte `projet`, `tags`, `sessions` et
+`branches`. La page projet liste les sessions avec leur résultat
+(`[[2026-09-23 — projet]] — <résultat>`, 15 dernières). `Tableau de bord.md`
+(lié depuis l'Index) montre les 10 dernières sessions tous projets confondus et
+le bilan de la compression des sorties sur 7 jours. Les anciens blocs « Fin de
+session » restent intacts. Le transcript est lu de façon incrémentale : un
+`Stop` coûte quelques millisecondes. Tests : `test-vault.js`, lancé par
+`node test.js` (vault et HOME temporaires, jamais le vrai vault).
 
 **Un projet = un dépôt git.** Le nom du projet (page et journal) vient de la
 racine du dépôt trouvée en remontant depuis le dossier de travail : un

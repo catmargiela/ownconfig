@@ -395,6 +395,6 @@ touch('comp-e', 'modules/a.ts', bare);
 check('aucune config : silence', stop('comp-e', bare).code, 0);
 fs.rmSync(TMP, { recursive: true, force: true });
 
-// ---------------------------------------------------------------- résultat, puis suite de compression (test-compress.js)
+// ---------------------------------------------------------------- résultat, puis suites compression et vault
 console.log(`\n  ${pass} réussis, ${fail} échoués sur ${pass + fail}\n`);
-process.exit(fail || spawnSync('node', [path.join(__dirname, 'test-compress.js')], { stdio: 'inherit' }).status !== 0 ? 1 : 0);
+process.exit(fail || ['test-compress.js', 'test-vault.js'].map((f) => spawnSync('node', [path.join(__dirname, f)], { stdio: 'inherit' }).status).some(Boolean) ? 1 : 0);

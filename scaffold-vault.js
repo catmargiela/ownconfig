@@ -7,7 +7,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { ROOT, DIRS, ensureDirs, VAULT } = require('./hooks/lib/vault');
+const { ROOT, DIRS, ensureDirs, VAULT, DASHBOARD, DASHBOARD_TEMPLATE, linkFromIndex } = require('./hooks/lib/vault');
 
 if (!fs.existsSync(VAULT)) {
   console.error(`Vault introuvable : ${VAULT}\nDéfinir CC_VAULT vers le bon dossier.`);
@@ -26,6 +26,8 @@ tags: [claude]
 Point d'entrée de la mémoire longue de Claude Code. Les pages ci-dessous sont
 lues automatiquement au début des sessions concernées.
 
+- [[Tableau de bord]] — dernières sessions, tous projets, et économies de tokens
+
 ## Profil — lu à chaque session
 
 - [[Façon de coder]] — préférences durables, injectées partout
@@ -33,24 +35,14 @@ lues automatiquement au début des sessions concernées.
 
 ## Projets
 
-Une page par projet, créée automatiquement à la première session dans le dossier.
-Ce qui est écrit à la main dans ces pages est réinjecté à chaque session suivante.
-
-\`\`\`dataview
-LIST FROM #projet SORT file.name ASC
-\`\`\`
+Une page par projet dans \`Projets/\`, créée automatiquement à la première
+session dans le dossier. Ce qui est écrit à la main dans ces pages est réinjecté
+à chaque session suivante. Chaque page liste ses sessions récentes et leur résultat.
 
 ## Journal
 
-Une note par jour et par projet, écrite automatiquement avant chaque compaction
-et en fin de session.
-
-\`\`\`dataview
-LIST FROM #session SORT file.name DESC LIMIT 20
-\`\`\`
-
-> Les blocs \`dataview\` nécessitent le plugin Dataview. Sans lui, les dossiers
-> \`Projets/\` et \`Journal/\` se parcourent normalement.
+Une note par jour et par projet dans \`Journal/\`, un bloc par session, mis à jour
+en fin de réponse et avant chaque compaction.
 
 ## Fonctionnement
 
@@ -58,7 +50,7 @@ LIST FROM #session SORT file.name DESC LIMIT 20
 |---|---|
 | Début de session | Lecture de [[Façon de coder]] + la page du projet + la dernière session |
 | Avant compaction | Écriture de l'état dans le journal du jour |
-| Fin de session | Mise à jour du bloc de fin de session, si des fichiers ont été modifiés |
+| Fin de réponse | Mise à jour du bloc de la session, de la page projet et du [[Tableau de bord]] |
 
 Les blocs entre \`<!-- claude:xxx:start -->\` et \`<!-- claude:xxx:end -->\` sont
 gérés automatiquement. Tout le reste est à toi et n'est jamais réécrit.
@@ -135,6 +127,8 @@ tags: [claude, profil]
 
 Voir [[Façon de coder]] et [[Index Claude]].
 `,
+
+  [DASHBOARD]: DASHBOARD_TEMPLATE,
 };
 
 let created = 0, skipped = 0;
@@ -145,5 +139,8 @@ for (const [file, content] of Object.entries(PAGES)) {
   created++;
   console.log('  créé   ', path.relative(VAULT, file));
 }
+// Index existant sans lien vers le tableau de bord : un bloc géré est ajouté,
+// le texte de l'utilisateur n'est pas touché.
+linkFromIndex();
 if (skipped) console.log(`  ${skipped} page(s) déjà présente(s), laissée(s) intacte(s)`);
 console.log(`\n  Vault prêt : ${ROOT}`);
