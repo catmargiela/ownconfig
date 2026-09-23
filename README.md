@@ -6,7 +6,7 @@ est actif immédiatement, sans réinstallation.
 
 Une mécanique (dispatcher de hooks, profils, fact-forcing, protection des
 garde-fous) et une surface volontairement réduite : 5 agents et 4 skills de base,
-plus un plugin `rebenga` (9 commandes, 9 agents, 6 skills). Une surface qui ne se
+plus un plugin `rebenga` (12 commandes, 12 agents, 8 skills). Une surface qui ne se
 déclenche jamais est un coût sans contrepartie.
 
 ## Installation
@@ -256,10 +256,17 @@ claude plugin install rebenga@ownconfig
 | `/rebenga:migration-check [fichier]` | contrôles statiques, essai `BEGIN…ROLLBACK` (dev par défaut), `sqlc` + `go build`/`go vet` |
 | `/rebenga:deploy-verify [env]` | déploie après accord, puis prouve : services, migrations, santé, proxy, bundle servi, `.env` bien formé |
 | `/rebenga:env-set <CLE>` | pose ou fait tourner un secret dans un `.env` sans que la valeur apparaisse nulle part |
+| `/rebenga:dual-review [PR ou chemins]` | grille PASS/FAIL objective, deux relecteurs indépendants en parallèle, 3 tours max, désaccords rapportés |
+| `/rebenga:canary-watch <url> [--baseline\|--compare\|--watch]` | photo de référence du site puis comparaison après déploiement : assets, `content-type`, latence, erreurs console, éléments clés (GET seulement) |
+| `/rebenga:hookify [comportement]` | transforme une correction répétée en nouveau garde-fou du dispatcher (module, tests, README), sur une branche |
 
 Agents appelables directement ou par délégation automatique :
 `typescript-reviewer`, `database-reviewer` (SQL, migrations, ORM),
-`rust-tauri-reviewer` (Rust, Tauri v2), `e2e-runner`, `tdd-guide`.
+`rust-tauri-reviewer` (Rust, Tauri v2), `e2e-runner`, `tdd-guide`,
+`silent-failure-hunter` (erreurs avalées : `_ = err`, `ErrNoRows` masqué,
+`catch {}`, fallbacks muets), `pr-test-analyzer` (les tests couvrent-ils
+vraiment le comportement modifié), `conversation-analyzer` (corrections
+répétées dans les sessions passées, pour `hookify`).
 
 | Skill | Rôle |
 |---|---|
@@ -269,6 +276,8 @@ Agents appelables directement ou par délégation automatique :
 | `issue-batch` | lot d'issues GitHub : implémentation, revue, fermeture, passage à Done dans Projects |
 | `mirror-sync` | un module dupliqué entre deux dépôts : divergences, patch appliqué des deux côtés |
 | `tauri-release` | release Tauri v2 via tauri-action : versions, signature, `latest.json`, runners |
+| `contract-first` | un contrat d'API, un fournisseur (Go/sqlc), plusieurs clients (Next, Tauri) : changements cassants repérés, tous les côtés mis à jour ensemble |
+| `iterative-retrieval` | délégation par tours : l'agent dit ce qui lui manque au lieu de tout recevoir d'avance (2-3 tours max) |
 
 Tout ce qui est propre à un projet (services attendus, URL de santé, paire de
 dépôts miroirs) est lu dans le projet lui-même — son `CLAUDE.md` ou ses scripts —
