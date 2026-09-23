@@ -6,7 +6,7 @@ est actif immédiatement, sans réinstallation.
 
 Une mécanique (dispatcher de hooks, profils, fact-forcing, protection des
 garde-fous) et une surface volontairement réduite : 5 agents et 4 skills de base,
-plus un plugin `rebenga` (13 commandes, 12 agents, 8 skills). Une surface qui ne se
+plus un plugin `rebenga` (14 commandes, 12 agents, 8 skills). Une surface qui ne se
 déclenche jamais est un coût sans contrepartie.
 
 ## Installation
@@ -309,7 +309,7 @@ en arrière-plan, une sortie courte ou peu compressible.
 `~/.claude/state/ccx/compress-stats.jsonl` : horodatage, deux premiers mots de la
 commande (`git log`, `go test` — jamais d'argument), processeur, tailles avant et
 après, code de sortie. Aucun contenu de sortie. Le fichier est élagué de moitié
-au-delà de 1 Mo. `/rebenga:token-stats [jours]` en fait le bilan.
+au-delà de 1 Mo. `/rebenga:token-stats [jours]` en fait le bilan, `/rebenga:token-log [jours] [--toutes]` liste les commandes une par une.
 
 Tests : `node test.js` lance aussi `test-compress.js` — liste blanche, intégration
 au dispatcher, wrapper (codes de sortie, stderr, erreurs internes) et seuils de
@@ -359,6 +359,7 @@ claude plugin install rebenga@ownconfig
 | `/rebenga:refactor-clean` | code mort, dépendances inutiles, lot par lot, tests verts |
 | `/rebenga:context-budget` | coût estimé du contexte résident, top 3 des économies |
 | `/rebenga:token-stats [jours]` | bilan de la compression des sorties : commandes compressées, tokens économisés (est.), processeurs les plus rentables |
+| `/rebenga:token-log [jours] [--toutes]` | liste une par une les commandes compressées (date, commande, processeur, avant → après, gain) ; `--toutes` ajoute celles rendues brutes |
 | `/rebenga:go-review`, `/rebenga:python-review` | revue via l'agent du langage |
 | `/rebenga:migration-check [fichier]` | contrôles statiques, essai `BEGIN…ROLLBACK` (dev par défaut), `sqlc` + `go build`/`go vet` |
 | `/rebenga:deploy-verify [env]` | déploie après accord, puis prouve : services, migrations, santé, proxy, bundle servi, `.env` bien formé |
