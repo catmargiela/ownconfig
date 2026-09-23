@@ -6,8 +6,9 @@ est actif immédiatement, sans réinstallation.
 
 Inspirée de [ECC](https://github.com/affaan-m/ECC) pour sa mécanique (dispatcher
 de hooks, profils, fact-forcing, protection des garde-fous), volontairement pas
-pour son volume : 5 agents et 3 skills au lieu de 68 et 286. Une surface qui ne
-se déclenche jamais est un coût sans contrepartie.
+pour son volume : 5 agents et 4 skills de base, plus un plugin `rebenga`
+(6 commandes, 8 agents, 2 skills) au lieu des 68 agents et 286 skills d'ECC. Une
+surface qui ne se déclenche jamais est un coût sans contrepartie.
 
 ## Installation
 
@@ -28,12 +29,16 @@ conservés. `settings.json` est sauvegardé à chaque passage.
 |---|---|
 | `CLAUDE.md` | règles chargées à chaque session — 63 lignes, chacune doit se justifier |
 | `agents/` | 5 sous-agents : relecture, sécurité, build, front, tests |
-| `skills/` | 3 workflows déclenchés par leur description |
+| `skills/` | 4 workflows déclenchés par leur description : `git-ship`, `verification-loop`, `vault-note`, `project-onboarding` |
 | `hooks/` | dispatcher + contrôles + pont Obsidian + moniteur de contexte |
+| `plugins/rebenga/` | plugin local : commandes `rebenga:*`, agents spécialisés, skills TDD et e2e (voir plus bas) |
+| `.claude-plugin/` | marketplace locale `ownconfig` qui publie le plugin |
 | `rules/templates/` | modèles de règles **par projet** (jamais installés en global) |
 
-Pas de dossier `commands/` : une commande exige d'être tapée, une skill se
-déclenche seule. Tout ce qui mérite d'exister est une skill.
+Pas de dossier `commands/` à la racine : une skill se déclenche seule, une
+commande exige d'être tapée. Les commandes qui méritent d'exister vivent dans le
+plugin, préfixées `rebenga:` pour ne jamais entrer en conflit avec les commandes
+intégrées.
 
 ## Profils
 
@@ -171,8 +176,19 @@ compaction, donc se repaie à chaque tour.
 - **Un contrôle** : un module dans `hooks/lib/`, exportant `run(input)`, ajouté à
   la table `EVENTS` de `hooks/dispatch.js`.
 
-Après ajout d'un agent ou d'une skill, relancer `node install.js` pour poser le
-lien. Modifier un fichier existant ne demande rien.
+- **Dans le plugin** : `plugins/rebenga/{commands,agents,skills}/`. Une commande
+  est un `.md` avec `description` + `argument-hint` ; elle délègue aux agents par
+  leur nom préfixé (`rebenga:<agent>`). Valider avec
+  `claude plugin validate plugins/rebenga --strict`.
+
+Après ajout d'un agent ou d'une skill de base, relancer `node install.js` pour
+poser le lien. Après modification du plugin :
+`claude plugin marketplace update ownconfig`. Modifier un fichier existant ne
+demande rien.
+
+**Règle : chaque nouvelle fonctionnalité met à jour ce README dans le même
+commit** — tableau `Contenu`, section concernée, et les compteurs de
+l'introduction.
 
 ## Plugin `rebenga`
 
@@ -204,3 +220,11 @@ Après modification du plugin : `claude plugin marketplace update ownconfig`.
 Les règles de langage vivent dans le projet (`.claude/rules/`), pas ici. Une
 règle globale est du contexte payé à chaque session, y compris sur les projets
 qui ne la concernent pas. Voir `rules/templates/`.
+
+Réglages de la machine, hors dépôt (non versionnés) :
+
+| Fichier | Rôle |
+|---|---|
+| `~/.claude/statusline.sh` | barre de statut : dossier, branche git, modèle, jauge de contexte, usage 5h / 7j, coût |
+| `~/.claude/bin/gh-mcp-headers.sh` | `headersHelper` du serveur MCP GitHub : lit le jeton de `gh` à chaque connexion, jamais écrit sur disque |
+| `~/.claude/settings.json` | skills inutilisées coupées (`skillOverrides`), `defaultMode: auto`, plugins actifs |
