@@ -52,6 +52,43 @@ function deny(reason) {
   process.exit(2);
 }
 
+/**
+ * Non-blocking warnings. Several modules share one process, and stdout must hold
+ * a single JSON object: modules only buffer here, the dispatcher flushes once.
+ */
+const warnings = [];
+
+function warn(msg) {
+  if (msg && !warnings.includes(msg)) warnings.push(msg);
+}
+
+/**
+ * Emit buffered warnings as hook JSON on stdout: `systemMessage` for the user,
+ * `additionalContext` for the model (PreToolUse / PostToolUse only).
+ */
+function flushWarnings(hookEventName) {
+  if (!warnings.length) return;
+  const text = warnings.join('\n\n');
+  const out = { systemMessage: text };
+  if (hookEventName === 'PreToolUse' || hookEventName === 'PostToolUse') {
+    out.hookSpecificOutput = { hookEventName, additionalContext: text };
+  }
+  process.stdout.write(JSON.stringify(out) + '\n');
+  warnings.length = 0;
+}
+
+/** Text an Edit / Write / MultiEdit call is about to put on disk. */
+function newTexts(toolInput) {
+  const ti = toolInput || {};
+  const out = [];
+  if (typeof ti.content === 'string') out.push(ti.content);
+  if (typeof ti.new_string === 'string') out.push(ti.new_string);
+  if (Array.isArray(ti.edits)) {
+    for (const e of ti.edits) if (e && typeof e.new_string === 'string') out.push(e.new_string);
+  }
+  return out;
+}
+
 /** Walk up from `start` looking for a file, stopping at the filesystem root. */
 function findUp(start, names) {
   let dir = start;
@@ -65,6 +102,40 @@ function findUp(start, names) {
     dir = parent;
   }
   return null;
+}
+
+/**
+ * Main working tree behind a `.git` FILE (linked worktree, e.g. `.claude/worktrees/x`).
+ * `gitdir:` points at `<main>/.git/worktrees/<name>`, whose `commondir` leads back
+ * to `<main>/.git`. Anything else (submodule, bare repo) keeps its own directory.
+ */
+function worktreeMain(dir, dotGit) {
+  const m = fs.readFileSync(dotGit, 'utf8').match(/^gitdir:\s*(.+)$/m);
+  if (!m) return dir;
+  const gitdir = path.resolve(dir, m[1].trim());
+  let common = null;
+  try {
+    common = path.resolve(gitdir, fs.readFileSync(path.join(gitdir, 'commondir'), 'utf8').trim());
+  } catch {
+    const parts = gitdir.split(path.sep);
+    const w = parts.lastIndexOf('worktrees');
+    if (w > 0) common = parts.slice(0, w).join(path.sep);
+  }
+  return common && path.basename(common) === '.git' ? path.dirname(common) : dir;
+}
+
+/**
+ * Root of the git repository containing `start`, worktrees resolved to the main
+ * repository. Pure filesystem walk (no `git` process). A repository at the home
+ * directory itself (dotfiles) is ignored: it would swallow every project.
+ */
+function gitRoot(start) {
+  if (!start) return null;
+  try {
+    const found = findUp(start, ['.git']);
+    if (!found || found.dir === os.homedir()) return null;
+    return fs.statSync(found.file).isFile() ? worktreeMain(found.dir, found.file) : found.dir;
+  } catch { return null; }
 }
 
 /** Run a command with a hard timeout. Returns {ok, out} and never throws. */
@@ -91,4 +162,7 @@ function tilde(p) {
   return p.startsWith(home) ? p.replace(home, '~') : p;
 }
 
-module.exports = { profile, enabled, readState, writeState, deny, findUp, run, tilde, ensureDir, STATE_DIR };
+module.exports = {
+  profile, enabled, readState, writeState, deny, warn, flushWarnings, newTexts,
+  findUp, gitRoot, run, tilde, ensureDir, STATE_DIR,
+};

@@ -14,15 +14,23 @@
  */
 
 const EVENTS = {
-  'pre-edit': ['./lib/pre-edit'],
-  'pre-bash': ['./lib/pre-bash'],
+  // Refus sur le contenu d'abord : un secret ou une migration cassée se refuse
+  // avant que le fact-forcing ne consomme son unique passage.
+  'pre-edit': ['./lib/secret-guard', './lib/migration-guard', './lib/pre-edit'],
+  // L'hygiène ne fait qu'avertir : elle passe en dernier, après tout refus.
+  'pre-bash': ['./lib/secret-guard', './lib/pre-bash', './lib/bash-hygiene'],
   'post-edit': ['./lib/post-edit'],
   // La capture vault passe AVANT les gates : ce qui doit être mémorisé l'est,
   // même si un gate interrompt ensuite la fin de réponse.
   'pre-compact': ['./lib/vault#onCompact'],
-  'stop': ['./lib/vault#onStop', './lib/stop-quality', './lib/context-monitor'],
+  // Un seul module interrompt par passage (sortie 2) : le typecheck d'abord, puis
+  // les compagnons, puis le contexte. Les suivants reprennent au Stop d'après.
+  'stop': ['./lib/vault#onStop', './lib/stop-quality', './lib/companion-check', './lib/context-monitor'],
   'session-start': ['./lib/vault#onStart'],
 };
+
+/** Nom Claude Code de l'événement, pour le canal d'avertissement JSON. */
+const HOOK_NAMES = { 'pre-edit': 'PreToolUse', 'pre-bash': 'PreToolUse', 'post-edit': 'PostToolUse' };
 
 const event = process.argv[2];
 const modules = EVENTS[event];
@@ -48,6 +56,12 @@ process.stdin.on('end', () => {
       // Un module cassé dégrade un contrôle, il ne bloque pas le travail.
       if (process.env.CCX_DEBUG === '1') process.stderr.write(`[ccx:${event}] ${spec}: ${err.message}\n`);
     }
+  }
+  // Avertissements non bloquants accumulés par les modules : une seule sortie JSON.
+  try {
+    require('./lib/util').flushWarnings(input.hook_event_name || HOOK_NAMES[event]);
+  } catch (err) {
+    if (process.env.CCX_DEBUG === '1') process.stderr.write(`[ccx:${event}] warnings: ${err.message}\n`);
   }
   process.exit(0);
 });

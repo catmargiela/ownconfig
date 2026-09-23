@@ -15,7 +15,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
-const { readState } = require('./util');
+const { readState, gitRoot } = require('./util');
 
 const VAULT = process.env.CC_VAULT || path.join(os.homedir(), 'Documents', 'Obsidian Vault');
 const ROOT = path.join(VAULT, 'Claude');
@@ -105,9 +105,19 @@ const CONTAINERS = new Set([
   'projects', 'projets', 'repos', 'git', 'workspace', 'sites',
 ]);
 
+/**
+ * Dossier qui identifie le projet : la racine du dépôt git trouvée en remontant
+ * depuis `cwd` — un sous-dossier ou un worktree (`.claude/worktrees/x`) donne la
+ * même page et le même journal que le dépôt principal. Hors dépôt : `cwd`.
+ */
+function projectDir(cwd) {
+  if (!cwd) return cwd;
+  return gitRoot(cwd) || cwd;
+}
+
 function projectName(cwd) {
   if (!cwd) return 'Sans projet';
-  const parts = cwd.split(path.sep).filter(Boolean);
+  const parts = projectDir(cwd).split(path.sep).filter(Boolean);
   const base = parts[parts.length - 1] || 'projet';
   const parent = parts[parts.length - 2];
   const ambiguous = GENERIC_BASE.has(base.toLowerCase()) || base.length <= 4;
@@ -123,10 +133,18 @@ function projectName(cwd) {
  * chercher le nom qu'il avait calculé et recrée un doublon vide à côté d'une
  * page pleine. Le chemin est l'identité stable, le nom n'est qu'un libellé.
  */
+const realOr = (p) => { try { return fs.realpathSync(p); } catch { return p; } };
+
+/**
+ * Une page qui déclare exactement `cwd` reste prioritaire (correspondance
+ * explicite) ; sinon, celle qui déclare la racine du dépôt git.
+ */
 function resolveProjectFile(cwd) {
   if (!cwd) return projectFile(projectName(cwd));
-  let target = cwd;
-  try { target = fs.realpathSync(cwd); } catch { /* dossier disparu */ }
+  const target = realOr(cwd);
+  const root = projectDir(cwd);
+  const rootReal = realOr(root);
+  let byRoot = null;
   try {
     for (const f of fs.readdirSync(DIRS.projets)) {
       if (!f.endsWith('.md')) continue;
@@ -135,12 +153,12 @@ function resolveProjectFile(cwd) {
       if (!m) continue;
       const declared = m[1].trim().replace(/^["']|["']$/g, '');
       if (!declared) continue;
-      let real = declared;
-      try { real = fs.realpathSync(declared); } catch { /* chemin déclaré absent */ }
+      const real = realOr(declared);
       if (real === target || declared === cwd) return full;
+      if (!byRoot && (real === rootReal || declared === root)) byRoot = full;
     }
   } catch { /* dossier Projets absent */ }
-  return projectFile(projectName(cwd));
+  return byRoot || projectFile(projectName(cwd));
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -367,7 +385,7 @@ function ensureProjectPage(name, cwd) {
   write(f, `---
 type: projet
 tags: [claude, projet]
-chemin: ${cwd || ''}
+chemin: ${cwd ? projectDir(cwd) : ''}
 ---
 
 # ${name}
@@ -563,7 +581,7 @@ function onStart(input) {
 module.exports = {
   onCompact, onStop, onStart, buildInjection,
   VAULT, ROOT, DIRS, BUDGET,
-  projectName, distill, isUserAsk, upsertRegion, cleanForInjection, tailSections, readRegion, stripRegions, ensureDirs,
+  projectName, projectDir, distill, isUserAsk, upsertRegion, cleanForInjection, tailSections, readRegion, stripRegions, ensureDirs,
   ensureProjectPage, projectFile, resolveProjectFile, journalFile, readBounded,
   vaultStatus, writeGuarded, withLock, hash, read, write,
 };

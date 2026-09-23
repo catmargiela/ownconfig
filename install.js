@@ -19,12 +19,16 @@ const HOME = os.homedir();
 const CLAUDE = path.join(HOME, '.claude');
 const HOOKS_DEST = path.join(CLAUDE, 'hooks', 'ccx');
 const SETTINGS = path.join(CLAUDE, 'settings.json');
+const BACKUPS = path.join(CLAUDE, 'backups');
 const MARKER = path.join('hooks', 'ccx', 'dispatch.js'); // signature de nos entrées
+const SETTINGS_BACKUP_PREFIX = 'settings.json.ccx-';
+const KEEP_BACKUPS = 3;
 
 const DRY = process.argv.includes('--dry-run');
 const UNINSTALL = process.argv.includes('--uninstall');
 
 const log = (...a) => console.log(DRY ? '[dry-run]' : '        ', ...a);
+const stamp = () => new Date().toISOString().replace(/[:.]/g, '-');
 
 const HOOK_ENTRIES = [
   { event: 'PreToolUse', matcher: 'Edit|Write|MultiEdit', arg: 'pre-edit', timeout: 10 },
@@ -36,6 +40,12 @@ const HOOK_ENTRIES = [
   // fait rater la ré-injection juste après une compaction — le moment précis où
   // le contexte vient d'être perdu.
   { event: 'SessionStart', matcher: 'startup|resume|clear|compact|fork', arg: 'session-start', timeout: 10 },
+];
+
+/** Scripts de la machine versionnés dans `bin/`, liés à leur emplacement attendu. */
+const SCRIPTS = [
+  ['statusline.sh', path.join(CLAUDE, 'statusline.sh')],
+  ['gh-mcp-headers.sh', path.join(CLAUDE, 'bin', 'gh-mcp-headers.sh')],
 ];
 
 /** Lien symbolique : la source de vérité reste le dépôt, les édits sont immédiats. */
@@ -63,6 +73,45 @@ function unlink(dest) {
   } catch { /* absent */ }
 }
 
+/**
+ * Un script local différent de la version du dépôt n'est jamais perdu : il part
+ * dans `~/.claude/backups/` avant d'être remplacé par le lien. Identique → rien.
+ */
+function backupIfDiffers(src, dest) {
+  let st;
+  try { st = fs.lstatSync(dest); } catch { return; }
+  if (!st.isFile()) return;
+  const same = fs.readFileSync(dest).equals(fs.readFileSync(src));
+  if (same) return;
+  const target = path.join(BACKUPS, `${path.basename(dest)}.ccx-${stamp()}`);
+  if (!DRY) {
+    fs.mkdirSync(BACKUPS, { recursive: true });
+    fs.copyFileSync(dest, target);
+  }
+  log('sauvegarde', target.replace(HOME, '~'));
+}
+
+function linkScript(name, dest) {
+  const src = path.join(SRC, 'bin', name);
+  if (!DRY) fs.chmodSync(src, 0o755);
+  backupIfDiffers(src, dest);
+  link(src, dest);
+}
+
+/**
+ * Garde les `keep` sauvegardes les plus récentes portant `prefix` dans `dir`.
+ * Le préfixe contient un horodatage ISO : l'ordre lexical est l'ordre temporel.
+ * Les autres fichiers du dossier ne sont jamais touchés. Renvoie les retirés.
+ */
+function pruneBackups(dir, prefix, keep, dry = false) {
+  let names;
+  try { names = fs.readdirSync(dir).filter((f) => f.startsWith(prefix)).sort(); }
+  catch { return []; }
+  const stale = names.slice(0, Math.max(0, names.length - keep));
+  if (!dry) for (const f of stale) { try { fs.unlinkSync(path.join(dir, f)); } catch { /* ignore */ } }
+  return stale;
+}
+
 /** Retire toutes nos entrées d'un settings.json, en laissant les autres intactes. */
 function stripOwn(settings) {
   let removed = 0;
@@ -83,12 +132,7 @@ function stripOwn(settings) {
   return removed;
 }
 
-function main() {
-  if (!fs.existsSync(CLAUDE)) { console.error('~/.claude introuvable — Claude Code est-il installé ?'); process.exit(1); }
-
-  console.log(UNINSTALL ? '\n  Désinstallation\n' : '\n  Installation de la configuration Claude Code\n');
-
-  // --- 1. Fichiers ---
+function installFiles() {
   const targets = [
     [path.join(SRC, 'CLAUDE.md'), path.join(CLAUDE, 'CLAUDE.md')],
     [path.join(SRC, 'hooks'), HOOKS_DEST],
@@ -100,8 +144,52 @@ function main() {
     targets.push([path.join(SRC, 'skills', name), path.join(CLAUDE, 'skills', name)]);
   }
 
-  if (UNINSTALL) targets.forEach(([, d]) => unlink(d));
-  else targets.forEach(([s, d]) => link(s, d));
+  if (UNINSTALL) {
+    targets.forEach(([, d]) => unlink(d));
+    SCRIPTS.forEach(([, d]) => unlink(d));
+  } else {
+    targets.forEach(([s, d]) => link(s, d));
+    SCRIPTS.forEach(([n, d]) => linkScript(n, d));
+  }
+}
+
+/** Lit settings.json et le sauvegarde dans `~/.claude/backups/`, 3 copies gardées. */
+function loadSettings() {
+  if (!fs.existsSync(SETTINGS)) return {};
+  const raw = fs.readFileSync(SETTINGS, 'utf8');
+  let settings;
+  try { settings = JSON.parse(raw); }
+  catch { console.error('settings.json est illisible (JSON invalide) — abandon, rien n\'a été modifié.'); process.exit(1); }
+  const backup = path.join(BACKUPS, `${SETTINGS_BACKUP_PREFIX}${stamp()}`);
+  if (!DRY) {
+    fs.mkdirSync(BACKUPS, { recursive: true });
+    fs.writeFileSync(backup, raw);
+  }
+  log('sauvegarde', backup.replace(HOME, '~'));
+  // En dry-run la nouvelle sauvegarde n'existe pas : on en garde une de moins.
+  const stale = pruneBackups(BACKUPS, SETTINGS_BACKUP_PREFIX, DRY ? KEEP_BACKUPS - 1 : KEEP_BACKUPS, DRY);
+  for (const f of stale) log('ancienne sauvegarde retirée', f);
+  return settings;
+}
+
+function registerHooks(settings) {
+  const dispatch = path.join(HOOKS_DEST, 'dispatch.js');
+  for (const e of HOOK_ENTRIES) {
+    settings.hooks[e.event] = settings.hooks[e.event] || [];
+    const group = { hooks: [{ type: 'command', command: `node "${dispatch}" ${e.arg}`, timeout: e.timeout }] };
+    if (e.matcher) group.matcher = e.matcher;
+    settings.hooks[e.event].push(group);
+  }
+  log(`${HOOK_ENTRIES.length} hooks enregistrés`);
+}
+
+function main() {
+  if (!fs.existsSync(CLAUDE)) { console.error('~/.claude introuvable — Claude Code est-il installé ?'); process.exit(1); }
+
+  console.log(UNINSTALL ? '\n  Désinstallation\n' : '\n  Installation de la configuration Claude Code\n');
+
+  // --- 1. Fichiers et scripts ---
+  installFiles();
 
   // --- 2. Ossature du vault Obsidian ---
   if (!UNINSTALL && !DRY) {
@@ -110,31 +198,12 @@ function main() {
   }
 
   // --- 3. settings.json ---
-  let settings = {};
-  if (fs.existsSync(SETTINGS)) {
-    const raw = fs.readFileSync(SETTINGS, 'utf8');
-    try { settings = JSON.parse(raw); }
-    catch { console.error('settings.json est illisible (JSON invalide) — abandon, rien n\'a été modifié.'); process.exit(1); }
-    const backup = `${SETTINGS}.ccx-backup-${new Date().toISOString().replace(/[:.]/g, '-')}`;
-    if (!DRY) fs.writeFileSync(backup, raw);
-    log('sauvegarde', path.basename(backup));
-  }
-
+  const settings = loadSettings();
   settings.hooks = settings.hooks || {};
   const before = JSON.stringify(settings.hooks).length;
   const removed = stripOwn(settings);
   if (removed) log(`${removed} ancienne(s) entrée(s) retirée(s)`);
-
-  if (!UNINSTALL) {
-    const dispatch = path.join(HOOKS_DEST, 'dispatch.js');
-    for (const e of HOOK_ENTRIES) {
-      settings.hooks[e.event] = settings.hooks[e.event] || [];
-      const group = { hooks: [{ type: 'command', command: `node "${dispatch}" ${e.arg}`, timeout: e.timeout }] };
-      if (e.matcher) group.matcher = e.matcher;
-      settings.hooks[e.event].push(group);
-    }
-    log(`${HOOK_ENTRIES.length} hooks enregistrés`);
-  }
+  if (!UNINSTALL) registerHooks(settings);
 
   const foreign = JSON.stringify(settings.hooks).length;
   if (!DRY) fs.writeFileSync(SETTINGS, JSON.stringify(settings, null, 2) + '\n');
@@ -148,4 +217,6 @@ function main() {
   console.log(UNINSTALL ? '\n  Désinstallé.\n' : `\n  Terminé. Profil actif : ${process.env.CC_PROFILE || 'standard'}\n  Redémarrer Claude Code pour charger les hooks.\n`);
 }
 
-main();
+if (require.main === module) main();
+
+module.exports = { pruneBackups, stripOwn };
