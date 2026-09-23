@@ -95,9 +95,9 @@ check('demande réelle conservée', v.isUserAsk('met tout le site en francais'),
 
 // ---------------------------------------------------------------- nommage
 group('Identité des projets');
-[['/Users/u/Documents/bara/danilov/crm', 'danilov-crm'],
- ['/Users/u/Documents/bara/autre/crm', 'autre-crm'],
- ['/Users/u/Documents/bara/env/www', 'env-www'],
+[['/Users/u/Documents/work/acme/crm', 'acme-crm'],
+ ['/Users/u/Documents/work/autre/crm', 'autre-crm'],
+ ['/Users/u/Documents/work/env/www', 'env-www'],
  ['/Users/u/Documents/portfolio', 'portfolio']]
   .forEach(([p, exp]) => check(`${p.split('/').slice(-2).join('/')} → ${exp}`, v.projectName(p), exp));
 

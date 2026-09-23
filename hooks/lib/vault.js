@@ -90,7 +90,7 @@ function ensureDirs() {
 /**
  * Nom de page lisible et discriminant.
  *
- * Le seul basename ne suffit pas : `danilov/crm` et `autre-client/crm`
+ * Le seul basename ne suffit pas : `acme/crm` et `autre-client/crm`
  * produiraient la même page. On préfixe par le dossier parent dès que le
  * basename est court ou générique — sauf quand ce parent n'est qu'un conteneur
  * (`Documents`, `Desktop`…), qui n'apprend rien.
