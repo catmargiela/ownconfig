@@ -46,9 +46,39 @@ const { enabled, readState, writeState, deny } = require('./util');
  * qui contient « drop table » ne doit pas déclencher le gate.
  */
 function stripQuoted(cmd) {
-  return stripHeredocs(cmd)
-    .replace(/'(?:[^'\\]|\\.)*'/g, "''")
-    .replace(/"(?:[^"\\]|\\.)*"/g, '""');
+  return scanQuotes(stripHeredocs(cmd));
+}
+
+/**
+ * Parcours gauche-droite fidèle au shell : entre apostrophes rien n'est échappé
+ * (`'a\'` se ferme au second `'`), entre guillemets `\` échappe, hors quotes `\'`
+ * est une apostrophe littérale. Une quote jamais refermée est laissée telle
+ * quelle : son contenu reste analysé (prudence).
+ */
+function scanQuotes(s) {
+  let out = '';
+  let i = 0;
+  while (i < s.length) {
+    const c = s[i];
+    if (c === '\\') { out += s.slice(i, i + 2); i += 2; continue; }
+    if (c !== "'" && c !== '"') { out += c; i += 1; continue; }
+    const end = closingQuote(s, i);
+    if (end < 0) return out + s.slice(i);
+    out += c + c;
+    i = end + 1;
+  }
+  return out;
+}
+
+/** Index de la quote fermante de celle ouverte en `start`, ou -1. */
+function closingQuote(s, start) {
+  const q = s[start];
+  if (q === "'") return s.indexOf("'", start + 1);
+  for (let j = start + 1; j < s.length; j += 1) {
+    if (s[j] === '\\') { j += 1; continue; }
+    if (s[j] === '"') return j;
+  }
+  return -1;
 }
 
 const DESTRUCTIVE = [
