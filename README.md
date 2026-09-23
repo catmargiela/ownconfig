@@ -33,7 +33,6 @@ conservés. `settings.json` est sauvegardé à chaque passage.
 | `hooks/` | dispatcher + contrôles + pont Obsidian + moniteur de contexte |
 | `plugins/rebenga/` | plugin local : commandes `rebenga:*`, agents spécialisés, skills TDD et e2e (voir plus bas) |
 | `.claude-plugin/` | marketplace locale `ownconfig` qui publie le plugin |
-| `sandbox/` | banc d'essai Tkinter : scénarios de hooks rejoués en isolation + contrôles de santé |
 | `rules/templates/` | modèles de règles **par projet** (jamais installés en global) |
 
 Pas de dossier `commands/` à la racine : une skill se déclenche seule, une
@@ -171,27 +170,6 @@ pouvoir être recoupé avec `/context` d'un coup d'œil.
 Les captures d'écran sont le poste le plus coûteux et le moins visible : une
 capture plein écran vaut environ 1600 tokens et reste en contexte jusqu'à la
 compaction, donc se repaie à chaque tour.
-
-## Sandbox
-
-Un banc d'essai pour voir comment tout se porte, sans rien risquer :
-
-```bash
-/usr/bin/python3 sandbox/app.py         # interface Tkinter
-/usr/bin/python3 sandbox/app.py --cli   # mêmes contrôles en texte (code 1 si écart)
-```
-
-`/usr/bin/python3` parce que le Python de macOS embarque Tkinter, pas celui de
-Homebrew (`brew install python-tk` sinon).
-
-| Onglet | Ce qu'il fait |
-|---|---|
-| **Hooks** | rejoue 22 scénarios (secrets, migrations, hygiène Bash, garde-fous) contre le **vrai** dispatcher de ce dépôt et compare le verdict attendu (refus / avertissement / silence) à l'obtenu ; choix du profil ; champ pour tester sa propre commande ou son propre fichier |
-| **Santé** | `test.js`, `plugin validate --strict`, version de Claude Code, connexion du MCP GitHub, coût permanent du plugin, aperçu **en couleurs** de la barre de statut |
-
-Chaque exécution tourne dans un `HOME` et un dossier de travail jetables : l'état
-des hooks, le vault et les vrais projets ne sont jamais touchés. Un nouveau
-garde-fou s'accompagne d'un scénario dans `sandbox/scenarios.py`.
 
 ## Étendre
 
