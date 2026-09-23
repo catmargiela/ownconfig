@@ -23,7 +23,9 @@ const EVENTS = {
   // La capture vault passe AVANT les gates : ce qui doit être mémorisé l'est,
   // même si un gate interrompt ensuite la fin de réponse.
   'pre-compact': ['./lib/vault#onCompact'],
-  'stop': ['./lib/vault#onStop', './lib/stop-quality', './lib/context-monitor'],
+  // Un seul module interrompt par passage (sortie 2) : le typecheck d'abord, puis
+  // les compagnons, puis le contexte. Les suivants reprennent au Stop d'après.
+  'stop': ['./lib/vault#onStop', './lib/stop-quality', './lib/companion-check', './lib/context-monitor'],
   'session-start': ['./lib/vault#onStart'],
 };
 

@@ -242,6 +242,159 @@ for (const f of fs.readdirSync(path.join(os.homedir(), '.claude', 'state', 'ccx'
   if (f.startsWith(`${SID}.`)) fs.unlinkSync(path.join(os.homedir(), '.claude', 'state', 'ccx', f));
 }
 
+// ---------------------------------------------------------------- scripts machine
+group('Scripts versionnés (bin/)');
+const BIN = path.join(__dirname, 'bin');
+const TMP = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ccx-t-')));
+const which = (cmd) => (spawnSync('sh', ['-c', `command -v ${cmd}`], { encoding: 'utf8' }).stdout || '').trim();
+const JQ = which('jq');
+for (const f of ['statusline.sh', 'gh-mcp-headers.sh']) {
+  check(`${f} exécutable`, (fs.statSync(path.join(BIN, f)).mode & 0o111) !== 0, true);
+}
+const ANSI = /\x1b\[[0-9;]*m/g;
+const statusline = (payload) => {
+  const r = spawnSync('bash', [path.join(BIN, 'statusline.sh')], { input: payload, encoding: 'utf8' });
+  return { code: r.status, out: (r.stdout || '').replace(ANSI, ''), err: r.stderr || '' };
+};
+if (!JQ) console.log('    --   jq absent : tests de la barre de statut et du helper sautés');
+else {
+  const proj = path.join(TMP, 'projx');
+  fs.mkdirSync(proj);
+  const sl = statusline(JSON.stringify({
+    workspace: { current_dir: proj }, model: { display_name: 'Opus 9 (1M context)' },
+    context_window: { used_percentage: 42.4 },
+    rate_limits: { five_hour: { used_percentage: 12 }, seven_day: { used_percentage: 30.6 } },
+    cost: { total_cost_usd: 1.234, total_duration_ms: 125000 },
+  }));
+  check('statusline : sortie 0', sl.code, 0);
+  [['dossier', 'projx'], ['modèle sans suffixe', 'Opus 9 │'], ['contexte', '42%'],
+   ['usage 5h · 7j', '5h 12% · 7j 31%'], ['coût + durée', '$1.23 2m']]
+    .forEach(([label, frag]) => check(`statusline : ${label}`, sl.out.includes(frag), true));
+  const empty = statusline('{}');
+  check('statusline sur {} : sortie 0, rien sur stderr', [empty.code, empty.err], [0, '']);
+  check('statusline sur {} : aucun segment inventé', /[%$]/.test(empty.out), false);
+}
+
+// Faux `gh` : aucun vrai jeton n'est jamais lu ni affiché par ces tests.
+const stubDir = path.join(TMP, 'stub');
+fs.mkdirSync(stubDir);
+const stubGh = (body) => fs.writeFileSync(path.join(stubDir, 'gh'), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+const headers = (env) => {
+  const r = spawnSync('/bin/sh', [path.join(BIN, 'gh-mcp-headers.sh')], { encoding: 'utf8', env });
+  return { code: r.status, out: r.stdout || '' };
+};
+stubGh('exit 1');
+const noAuth = headers({ PATH: `${stubDir}:/usr/bin:/bin` });
+check('headers : gh non authentifié → sortie ≠ 0, rien imprimé', [noAuth.code !== 0, noAuth.out], [true, '']);
+if (JQ) {
+  stubGh('printf "tok-%s" "$HOME"');
+  const ok = headers({ PATH: `${stubDir}:${path.dirname(JQ)}:/usr/bin:/bin` });
+  check('headers : env vide → HOME déduit, en-tête Bearer', /^\{"Authorization":"Bearer tok-\/[^"]+"\}\n$/.test(ok.out), true);
+}
+// Vrai `gh`, environnement vide : seule la forme est vérifiée, le contenu jamais affiché.
+const real = headers({});
+check('headers : env -i réel → en-tête bien formé ou échec muet',
+  real.code === 0 ? /^\{"Authorization":"Bearer [^"]+"\}\n$/.test(real.out) : real.out === '', true);
+
+// ---------------------------------------------------------------- installeur
+group('Installeur : liens et sauvegardes');
+const { pruneBackups } = require('./install.js');
+const bdir = path.join(TMP, 'backups');
+fs.mkdirSync(bdir);
+const ccx = ['2026-01-01', '2026-02-01', '2026-03-01', '2026-04-01', '2026-05-01']
+  .map((d) => `settings.json.ccx-${d}T10-00-00-000Z`);
+for (const f of [...ccx, 'settings.json.pre-cleanup-1', 'statusline.v1.sh']) fs.writeFileSync(path.join(bdir, f), 'x');
+check('élagage : 2 plus anciennes retirées', pruneBackups(bdir, 'settings.json.ccx-', 3), ccx.slice(0, 2));
+check('élagage : 3 plus récentes + fichiers tiers gardés', fs.readdirSync(bdir).sort(),
+  [...ccx.slice(2), 'settings.json.pre-cleanup-1', 'statusline.v1.sh'].sort());
+check('élagage : dossier absent → rien', pruneBackups(path.join(TMP, 'nope'), 'x', 3), []);
+
+const fakeHome = path.join(TMP, 'home');
+fs.mkdirSync(path.join(fakeHome, '.claude', 'backups'), { recursive: true });
+fs.writeFileSync(path.join(fakeHome, '.claude', 'settings.json'), '{}\n');
+for (const f of ccx.slice(0, 4)) fs.writeFileSync(path.join(fakeHome, '.claude', 'backups', f), 'x');
+const dry = spawnSync('node', [path.join(__dirname, 'install.js'), '--dry-run'],
+  { encoding: 'utf8', env: { ...process.env, HOME: fakeHome } }).stdout || '';
+check('dry-run : lien statusline.sh', dry.includes(`${path.join(fakeHome, '.claude', 'statusline.sh')} -> ${path.join(BIN, 'statusline.sh')}`), true);
+check('dry-run : lien gh-mcp-headers.sh',
+  dry.includes(`${path.join(fakeHome, '.claude', 'bin', 'gh-mcp-headers.sh')} -> ${path.join(BIN, 'gh-mcp-headers.sh')}`), true);
+check('dry-run : sauvegarde dans backups/', dry.includes('~/.claude/backups/settings.json.ccx-'), true);
+check('dry-run : annonce 2 sauvegardes retirées', (dry.match(/ancienne sauvegarde retirée/g) || []).length, 2);
+check('dry-run : rien écrit ni supprimé', fs.readdirSync(path.join(fakeHome, '.claude', 'backups')).length, 4);
+
+// ---------------------------------------------------------------- racine git
+group('Projet = racine du dépôt git');
+const mk = (...p) => { const d = path.join(TMP, ...p); fs.mkdirSync(d, { recursive: true }); return d; };
+const mainRepo = mk('mainrepo');
+mk('mainrepo', '.git', 'worktrees', 'wt-feature');
+fs.writeFileSync(path.join(mainRepo, '.git', 'worktrees', 'wt-feature', 'commondir'), '../..\n');
+const wt = mk('wt-feature', 'src');
+fs.writeFileSync(path.join(TMP, 'wt-feature', '.git'), `gitdir: ${path.join(mainRepo, '.git', 'worktrees', 'wt-feature')}\n`);
+const nested = mk('mainrepo', '.claude', 'worktrees', 'agent-x');
+fs.writeFileSync(path.join(nested, '.git'), `gitdir: ${path.join(mainRepo, '.git', 'worktrees', 'agent-x')}\n`);
+check('sous-dossier → nom du dépôt', v.projectName(mk('mainrepo', 'pkg', 'sub')), 'mainrepo');
+check('worktree externe → dépôt principal', v.projectName(wt), 'mainrepo');
+check('.claude/worktrees/* → dépôt principal', v.projectName(nested), 'mainrepo');
+check('hors dépôt → comportement inchangé', v.projectName(mk('plain', 'dir')), 'plain-dir');
+check('sous-module (.git fichier hors worktrees) → lui-même',
+  (() => { const s = mk('mainrepo', 'vendor', 'submod'); fs.writeFileSync(path.join(s, '.git'), 'gitdir: ../../.git/modules/submod\n'); return v.projectName(s); })(),
+  'submod');
+if (which('git')) {
+  const g = (args, cwd) => spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid',
+    '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', ...args], { cwd, encoding: 'utf8' });
+  const realRepo = mk('realrepo');
+  g(['init', '-q'], realRepo);
+  g(['commit', '-q', '--allow-empty', '-m', 'init'], realRepo);
+  g(['worktree', 'add', '-q', path.join(TMP, 'realrepo-wt')], realRepo);
+  check('vrai `git worktree add` → dépôt principal', v.projectName(path.join(TMP, 'realrepo-wt')), 'realrepo');
+}
+const vaultMap = (cwd) => {
+  const r = spawnSync('node', ['-e', 'console.log(require("path").basename(require(process.argv[1]).resolveProjectFile(process.argv[2])))',
+    path.join(LIB, 'vault.js'), cwd], { encoding: 'utf8', env: { ...process.env, CC_VAULT: path.join(TMP, 'vault') } });
+  return (r.stdout || '').trim();
+};
+const projets = mk('vault', 'Claude', 'Projets');
+fs.writeFileSync(path.join(projets, 'Explicite.md'), `---\nchemin: ${path.join(mainRepo, 'pkg', 'sub')}\n---\n`);
+fs.writeFileSync(path.join(projets, 'Racine.md'), `---\nchemin: ${mainRepo}\n---\n`);
+check('chemin: explicite du sous-dossier prioritaire', vaultMap(path.join(mainRepo, 'pkg', 'sub')), 'Explicite.md');
+check('chemin: de la racine trouvé depuis un sous-dossier', vaultMap(path.join(mainRepo, 'pkg')), 'Racine.md');
+check('chemin: de la racine trouvé depuis un worktree', vaultMap(wt), 'Racine.md');
+
+// ---------------------------------------------------------------- compagnons
+group('Fichiers compagnons');
+const cc = require('./hooks/lib/companion-check.js');
+[['modules/a.ts', 'modules/', true], ['modules2/a.ts', 'modules', false], ['src/demos.ts', 'demos.ts', true],
+ ['a/b/c.ts', 'a/**/*.ts', true], ['a/c.ts', 'a/**/*.ts', true], ['a/b/c.ts', 'a/*.ts', false]]
+  .forEach(([rel, pat, exp]) => check(`${pat} ~ ${rel} = ${exp}`, cc.matches(rel, pat), exp));
+const compRepo = mk('comprepo', '.git');
+const repoDir = path.dirname(compRepo);
+mk('comprepo', '.claude');
+const setRules = (dir, text) => fs.writeFileSync(path.join(dir, '.claude', 'companions.json'), text);
+setRules(repoDir, JSON.stringify([{ when: 'modules/', require: 'demos.ts' }]));
+const CENV = { ...BASE_ENV, HOME: fakeHome, CC_VAULT_DISABLED: '1', CC_CONTEXT_MONITOR: 'off' };
+const touch = (sid, rel, dir = repoDir) =>
+  hook('post-edit', { session_id: sid, tool_name: 'Edit', tool_input: { file_path: path.join(dir, rel) } }, CENV);
+const stop = (sid, dir = repoDir, env = {}) => hook('stop', { session_id: sid, cwd: dir }, { ...CENV, ...env });
+touch('comp-a', 'modules/a.ts');
+const fired = stop('comp-a');
+check('règle déclenchée : Stop interrompu', [fired.code, /demos\.ts/.test(fired.err)], [2, true]);
+check('rappel unique par session', stop('comp-a').code, 0);
+touch('comp-b', 'modules/a.ts'); touch('comp-b', 'src/demos.ts');
+check('règle satisfaite : silence', stop('comp-b').code, 0);
+touch('comp-c', 'modules/a.ts');
+check('muet en minimal', stop('comp-c', repoDir, { CC_PROFILE: 'minimal' }).code, 0);
+check('muet avec CCX_DISABLED', stop('comp-c', repoDir, { CCX_DISABLED: '1' }).code, 0);
+setRules(repoDir, JSON.stringify([{ when: 'modules/**', require: 'demos.ts', message: 'Ajoute la démo.' }]));
+check('message personnalisé', stop('comp-c').err.includes('Ajoute la démo.'), true);
+setRules(repoDir, '{ pas du json');
+touch('comp-d', 'modules/a.ts');
+const bad = stop('comp-d');
+check('JSON invalide : silence, sans erreur interne', [bad.code, /\[ccx:|\[Compagnons\]/.test(bad.err)], [0, false]);
+const bare = path.dirname(mk('bare', '.git'));
+touch('comp-e', 'modules/a.ts', bare);
+check('aucune config : silence', stop('comp-e', bare).code, 0);
+fs.rmSync(TMP, { recursive: true, force: true });
+
 // ---------------------------------------------------------------- résultat
 console.log(`\n  ${pass} réussis, ${fail} échoués sur ${pass + fail}\n`);
 process.exit(fail ? 1 : 0);

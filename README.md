@@ -4,11 +4,10 @@ Configuration personnelle versionnée. Source de vérité : ce dépôt.
 `~/.claude` ne contient que des liens symboliques vers lui — un fichier édité ici
 est actif immédiatement, sans réinstallation.
 
-Inspirée de [ECC](https://github.com/affaan-m/ECC) pour sa mécanique (dispatcher
-de hooks, profils, fact-forcing, protection des garde-fous), volontairement pas
-pour son volume : 5 agents et 4 skills de base, plus un plugin `rebenga`
-(9 commandes, 9 agents, 6 skills) au lieu des 68 agents et 286 skills d'ECC. Une
-surface qui ne se déclenche jamais est un coût sans contrepartie.
+Une mécanique (dispatcher de hooks, profils, fact-forcing, protection des
+garde-fous) et une surface volontairement réduite : 5 agents et 4 skills de base,
+plus un plugin `rebenga` (9 commandes, 9 agents, 6 skills). Une surface qui ne se
+déclenche jamais est un coût sans contrepartie.
 
 ## Installation
 
@@ -21,7 +20,15 @@ node install.js --uninstall  # retire tout, laisse les hooks tiers en place
 L'installeur est idempotent : il retire d'abord ses propres entrées de
 `settings.json` (reconnues au chemin `hooks/ccx/dispatch.js`) avant de les
 reposer. Les hooks tiers — vibe-island, pixel-agents — sont relus, comptés et
-conservés. `settings.json` est sauvegardé à chaque passage.
+conservés. `settings.json` est sauvegardé à chaque passage dans
+`~/.claude/backups/settings.json.ccx-<horodatage>` ; seules les 3 sauvegardes les
+plus récentes sont gardées, les autres fichiers du dossier ne sont jamais touchés.
+
+Il lie aussi les deux scripts de `bin/` à l'endroit où Claude Code les attend :
+`~/.claude/statusline.sh` et `~/.claude/bin/gh-mcp-headers.sh` (rendus
+exécutables). Si un vrai fichier différent s'y trouve déjà, il est d'abord copié
+dans `~/.claude/backups/` ; identique, il est remplacé sans bruit. `--uninstall`
+retire ces liens comme les autres.
 
 ## Contenu
 
@@ -30,7 +37,9 @@ conservés. `settings.json` est sauvegardé à chaque passage.
 | `CLAUDE.md` | règles chargées à chaque session — 63 lignes, chacune doit se justifier |
 | `agents/` | 5 sous-agents : relecture, sécurité, build, front, tests |
 | `skills/` | 4 workflows déclenchés par leur description : `git-ship`, `verification-loop`, `vault-note`, `project-onboarding` |
-| `hooks/` | dispatcher + contrôles + pont Obsidian + moniteur de contexte |
+| `hooks/` | dispatcher + contrôles + pont Obsidian + moniteur de contexte + rappel des fichiers compagnons |
+| `bin/statusline.sh` | barre de statut : dossier, branche git, modèle, jauge de contexte, usage `5h N% · 7j N%`, coût |
+| `bin/gh-mcp-headers.sh` | `headersHelper` du serveur MCP GitHub : lit le jeton de `gh` à chaque connexion, jamais écrit sur disque ; tolère un environnement vide (`HOME` déduit du compte, `gh`/`jq` trouvés par `PATH` puis Homebrew) |
 | `plugins/rebenga/` | plugin local : commandes `rebenga:*`, agents spécialisés, skills TDD et e2e (voir plus bas) |
 | `.claude-plugin/` | marketplace locale `ownconfig` qui publie le plugin |
 | `rules/templates/` | modèles de règles **par projet** (jamais installés en global) |
@@ -47,7 +56,7 @@ La rigueur se règle par une variable d'environnement, sans toucher à la config
 | `CC_PROFILE` | Comportement |
 |---|---|
 | `minimal` | refus durs seulement (`--no-verify`, `push --force`, `curl \| sh`, secret écrit en clair) |
-| `standard` | *(défaut)* + protection des garde-fous, garde des migrations, avertissements d'hygiène Bash, fact-forcing sur commandes destructives, gate qualité sur `Stop` |
+| `standard` | *(défaut)* + protection des garde-fous, garde des migrations, avertissements d'hygiène Bash, fact-forcing sur commandes destructives, gate qualité et rappel des compagnons sur `Stop` |
 | `strict` | + fact-forcing sur la première écriture de **chaque** fichier |
 
 ```bash
@@ -68,9 +77,9 @@ qu'un process par contrôle enregistré.
 |---|---|
 | `PreToolUse` Edit/Write | refuse un secret écrit en clair (`secret-guard`) ; refuse une migration goose avec `;` en commentaire ou sans `Down`, avertit sur `DROP` sans `IF EXISTS` et AND/OR non parenthésés (`migration-guard`) ; refuse d'éditer une config de lint/format/types ; fact-forcing (strict) |
 | `PreToolUse` Bash | refuse un secret écrit dans un fichier ; refus durs ; fact-forcing sur commande destructive ; avertissements d'hygiène : glob zsh sans correspondance, guillemets imbriqués dans `ssh`, statut lu après un pipe sans `pipefail`, `sleep` long (`bash-hygiene`) |
-| `PostToolUse` Edit/Write | empile les fichiers touchés (aucun travail lourd ici) |
+| `PostToolUse` Edit/Write | empile les fichiers touchés : lot de la réponse + liste de la session (aucun travail lourd ici) |
 | `PreCompact` | écrit l'état de la session dans le vault Obsidian |
-| `Stop` | capture vault, puis format + typecheck + `console.log` en un lot, puis mesure du contexte |
+| `Stop` | capture vault, puis format + typecheck + `console.log` en un lot, puis rappel des fichiers compagnons (`companion-check`), puis mesure du contexte |
 | `SessionStart` | réinjecte le profil et le contexte projet depuis le vault |
 
 Deux invariants :
@@ -79,7 +88,8 @@ Deux invariants :
    termine en sortie 0. Seul un refus délibéré sort en 2.
 2. **Aucun gate ne boucle.** Le fact-forcing ne se déclenche qu'une fois par
    cible et par session ; le gate de typecheck est plafonné à 3 relances et
-   ignore une signature d'erreur déjà vue.
+   ignore une signature d'erreur déjà vue ; le rappel des compagnons ne
+   revient jamais deux fois pour la même règle dans une session.
 
 Les avertissements non bloquants sont regroupés par le dispatcher et émis en un
 seul JSON (`systemMessage` pour toi, `additionalContext` pour le modèle), une
@@ -92,6 +102,28 @@ demande donc pas confirmation, il **refuse** et exige des faits — qui importe 
 fichier, quelle API publique bouge, quel est le plan de rollback, quelle était
 l'instruction exacte. L'investigation forcée produit une prudence que
 l'auto-évaluation ne produit pas. La seconde tentative passe.
+
+### Fichiers compagnons
+
+Certains changements vont par paires : un module et sa démo, un schéma et sa
+migration. Un projet le déclare, s'il le veut, dans
+`<racine du dépôt>/.claude/companions.json` :
+
+```json
+[
+  { "when": "modules/", "require": "demos.ts",
+    "message": "Des fichiers de modules/ ont changé mais aucun fichier démo (demos.ts) : ajoute la démo dans le même commit." }
+]
+```
+
+Si un fichier touché pendant la session correspond à `when` et qu'aucun ne
+correspond à `require`, le `Stop` est interrompu une fois par règle et par
+session avec `message` (ou un texte par défaut). Motifs relatifs à la racine du
+dépôt : préfixe de dossier (`modules/`), chemin exact, ou glob (`*`, `**`, `?`) ;
+un motif sans `/` vise aussi le nom de fichier seul (`demos.ts` couvre
+`src/demos.ts`). Pas de fichier, JSON invalide ou règle incomplète : silence.
+Actif en `standard` et `strict`. Seules les écritures faites par Edit/Write
+comptent, pas les fichiers créés par une commande Bash.
 
 ## Mémoire longue — vault Obsidian
 
@@ -112,6 +144,14 @@ Le contexte d'une session disparaît à la compaction. Le vault est ce qui reste
 | `SessionStart` | injecte le profil + la page projet + la dernière session, sous budget |
 | `PreCompact` | écrit l'état dans le journal du jour **avant** que le contexte soit perdu |
 | `Stop` | met à jour le bloc de fin de session, seulement si des fichiers ont été modifiés |
+
+**Un projet = un dépôt git.** Le nom du projet (page et journal) vient de la
+racine du dépôt trouvée en remontant depuis le dossier de travail : un
+sous-dossier écrit dans le même journal que la racine, et un worktree — y compris
+`.claude/worktrees/*` — dans celui du dépôt principal. Une page dont le `chemin:`
+vise exactement le dossier de travail reste prioritaire ; hors dépôt git, le nom
+vient du dossier de travail comme avant. Un dépôt situé à la racine du dossier
+personnel (dotfiles) est ignoré.
 
 La skill `vault-note` sert à l'écriture délibérée — c'est elle qui produit les
 bonnes notes ; les hooks ne sont que le filet automatique.
@@ -242,10 +282,9 @@ Les règles de langage vivent dans le projet (`.claude/rules/`), pas ici. Une
 règle globale est du contexte payé à chaque session, y compris sur les projets
 qui ne la concernent pas. Voir `rules/templates/`.
 
-Réglages de la machine, hors dépôt (non versionnés) :
+Réglages de la machine, hors dépôt (non versionnés) — la barre de statut et le
+helper d'en-têtes GitHub sont désormais versionnés dans `bin/` :
 
 | Fichier | Rôle |
 |---|---|
-| `~/.claude/statusline.sh` | barre de statut : dossier, branche git, modèle, jauge de contexte, usage 5h / 7j, coût |
-| `~/.claude/bin/gh-mcp-headers.sh` | `headersHelper` du serveur MCP GitHub : lit le jeton de `gh` à chaque connexion, jamais écrit sur disque |
 | `~/.claude/settings.json` | skills inutilisées coupées (`skillOverrides`), `defaultMode: auto`, plugins actifs |
