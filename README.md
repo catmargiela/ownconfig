@@ -6,7 +6,7 @@ est actif immédiatement, sans réinstallation.
 
 Une mécanique (dispatcher de hooks, profils, fact-forcing, protection des
 garde-fous) et une surface volontairement réduite : 5 agents et 4 skills de base,
-plus un plugin `rebenga` (12 commandes, 12 agents, 8 skills). Une surface qui ne se
+plus un plugin `rebenga` (13 commandes, 12 agents, 8 skills). Une surface qui ne se
 déclenche jamais est un coût sans contrepartie.
 
 ## Installation
@@ -37,7 +37,7 @@ retire ces liens comme les autres.
 | `CLAUDE.md` | règles chargées à chaque session — 63 lignes, chacune doit se justifier |
 | `agents/` | 5 sous-agents : relecture, sécurité, build, front, tests |
 | `skills/` | 4 workflows déclenchés par leur description : `git-ship`, `verification-loop`, `vault-note`, `project-onboarding` |
-| `hooks/` | dispatcher + contrôles + pont Obsidian + moniteur de contexte + rappel des fichiers compagnons |
+| `hooks/` | dispatcher + contrôles + pont Obsidian + moniteur de contexte + rappel des fichiers compagnons + compression des sorties Bash (`hooks/lib/compress/`) |
 | `bin/statusline.sh` | barre de statut : dossier, branche git, modèle, jauge de contexte, usage `5h N% · 7j N%`, coût |
 | `bin/gh-mcp-headers.sh` | `headersHelper` du serveur MCP GitHub : lit le jeton de `gh` à chaque connexion, jamais écrit sur disque ; tolère un environnement vide (`HOME` déduit du compte, `gh`/`jq` trouvés par `PATH` puis Homebrew) |
 | `plugins/rebenga/` | plugin local : commandes `rebenga:*`, agents spécialisés, skills TDD et e2e (voir plus bas) |
@@ -55,8 +55,8 @@ La rigueur se règle par une variable d'environnement, sans toucher à la config
 
 | `CC_PROFILE` | Comportement |
 |---|---|
-| `minimal` | refus durs seulement (`--no-verify`, `push --force`, `curl \| sh`, secret écrit en clair) |
-| `standard` | *(défaut)* + protection des garde-fous, garde des migrations, avertissements d'hygiène Bash, fact-forcing sur commandes destructives, gate qualité et rappel des compagnons sur `Stop` |
+| `minimal` | refus durs seulement (`--no-verify`, `push --force`, `curl \| sh`, secret écrit en clair) ; aucune compression des sorties |
+| `standard` | *(défaut)* + protection des garde-fous, garde des migrations, avertissements d'hygiène Bash, fact-forcing sur commandes destructives, gate qualité et rappel des compagnons sur `Stop`, compression des sorties Bash |
 | `strict` | + fact-forcing sur la première écriture de **chaque** fichier |
 
 ```bash
@@ -66,7 +66,9 @@ CCX_DISABLED=1 claude         # tout couper
 
 Échappatoires ciblées : `CCX_ALLOW_CONFIG=1` (autoriser une édition de config),
 `CCX_ALLOW_MIGRATION=1` (passer outre la garde des migrations),
-`CCX_NO_TYPECHECK=1`, `CCX_DEBUG=1` (voir les erreurs internes des hooks).
+`CCX_NO_TYPECHECK=1`, `CCX_DEBUG=1` (voir les erreurs internes des hooks),
+`CCX_RAW=1 <commande>` (sortie brute d'une commande), `CCX_COMPRESS=off` (couper la
+compression des sorties).
 
 ## Hooks
 
@@ -76,7 +78,7 @@ qu'un process par contrôle enregistré.
 | Événement | Contrôle |
 |---|---|
 | `PreToolUse` Edit/Write | refuse un secret écrit en clair (`secret-guard`) ; refuse une migration goose avec `;` en commentaire ou sans `Down`, avertit sur `DROP` sans `IF EXISTS` et AND/OR non parenthésés (`migration-guard`) ; refuse d'éditer une config de lint/format/types ; fact-forcing (strict) |
-| `PreToolUse` Bash | refuse un secret écrit dans un fichier ; refus durs ; fact-forcing sur commande destructive ; avertissements d'hygiène : glob zsh sans correspondance, guillemets imbriqués dans `ssh`, statut lu après un pipe sans `pipefail`, `sleep` long (`bash-hygiene`) |
+| `PreToolUse` Bash | refuse un secret écrit dans un fichier ; refus durs ; fact-forcing sur commande destructive ; avertissements d'hygiène : glob zsh sans correspondance, guillemets imbriqués dans `ssh`, statut lu après un pipe sans `pipefail`, `sleep` long (`bash-hygiene`) ; en dernier, réécrit une commande de lecture ou de build éligible pour compresser sa sortie (`compress`, voir plus bas) |
 | `PostToolUse` Edit/Write | empile les fichiers touchés : lot de la réponse + liste de la session (aucun travail lourd ici) |
 | `PreCompact` | écrit l'état de la session dans le vault Obsidian |
 | `Stop` | capture vault, puis format + typecheck + `console.log` en un lot, puis rappel des fichiers compagnons (`companion-check`), puis mesure du contexte |
@@ -93,7 +95,8 @@ Deux invariants :
 
 Les avertissements non bloquants sont regroupés par le dispatcher et émis en un
 seul JSON (`systemMessage` pour toi, `additionalContext` pour le modèle), une
-fois par cible et par session.
+fois par cible et par session. Une réécriture de commande (`updatedInput`) passe
+par ce même JSON, jamais accompagnée d'une décision de permission.
 
 ### Le fact-forcing
 
@@ -102,6 +105,12 @@ demande donc pas confirmation, il **refuse** et exige des faits — qui importe 
 fichier, quelle API publique bouge, quel est le plan de rollback, quelle était
 l'instruction exacte. L'investigation forcée produit une prudence que
 l'auto-évaluation ne produit pas. La seconde tentative passe.
+
+Le contenu des chaînes citées est neutralisé avant l'analyse (un message de
+commit qui contient « drop table » ne déclenche rien). Cette lecture suit les
+règles réelles du shell : entre apostrophes, rien n'est échappé — `'a\'` se ferme
+au second `'` — donc `ls 'a\' ; rm -rf x ; echo '` laisse bien voir le `rm -rf`.
+Une quote jamais refermée est analysée telle quelle, par prudence.
 
 ### Fichiers compagnons
 
@@ -211,6 +220,103 @@ Les captures d'écran sont le poste le plus coûteux et le moins visible : une
 capture plein écran vaut environ 1600 tokens et reste en contexte jusqu'à la
 compaction, donc se repaie à chaque tour.
 
+## Compression des sorties
+
+La sortie d'une commande Bash entre dans le contexte et s'y repaie à chaque tour.
+Un `go test -v`, un `next build` ou un `git log` en déversent des milliers de
+caractères dont le modèle n'a besoin que d'une fraction : les échecs, les
+erreurs, le résumé.
+
+**Principe.** `PostToolUse` ne peut pas modifier une sortie : la compression se
+fait donc en amont. Au `PreToolUse` Bash, une commande éligible est réécrite
+(`updatedInput`) en `node '<…>/wrap.js' <commande en base64> # '<commande>'`. Le
+wrapper exécute la commande **inchangée** dans ton shell, garde stdout et stderr
+séparés, rend le code de sortie de la commande (signal : 128 + n), et imprime une
+version condensée de chaque flux. La commande d'origine reste lisible en
+commentaire, pour qui relit l'appel.
+
+**Modèle de sécurité.**
+
+- **Liste blanche stricte** de commandes de lecture et de build (voir le tableau).
+  Tout le reste passe sans être touché — y compris les commandes destructives ou
+  à effet de bord, qui ne sont de toute façon jamais sur la liste.
+- **Aucune décision de permission.** Le hook n'émet jamais `permissionDecision` :
+  la commande réécrite repasse par le flux de permission normal et par le
+  classifieur du mode auto, exactement comme l'originale.
+- **Passe en dernier.** Le module `compress` est le dernier de la chaîne
+  `pre-bash` : un refus (secret, `push --force`, fact-forcing) termine le hook en
+  sortie 2 avant lui ; une commande refusée n'est jamais réécrite.
+- **Une seule commande simple.** Refusés : `&&`, `||`, `;`, pipe, retour à la
+  ligne, `$(…)`, backticks, `<<`, `<(…)`, toute redirection, `&` final,
+  variable en tête (`X=1 cmd`), `$` et `\` hors guillemets simples, `sudo`,
+  un binaire hors des dossiers système standard (`/tmp/x/git` n'est pas `git`),
+  les options de sortie structurée (`--json`, `-o json`, `--format`,
+  `--porcelain`…), de suivi ou de surveillance (`-f`/`--follow` des logs,
+  `--watch`, `vitest` sans `run`), d'écriture (`--fix`, `-u`, `--output`,
+  `find -exec`/`-delete`) et les commandes lancées en arrière-plan. Le wrapper
+  revérifie l'éligibilité avant d'exécuter.
+- **Rien ne se perd.** Sortie de moins de 2000 caractères ou gain inférieur à
+  20 % : sortie brute inchangée. Erreur interne : sortie brute, même code.
+  Sortie de plus de 8 Mo : transmise telle quelle. Sortie binaire : octet pour
+  octet.
+- **Récupération des lignes critiques.** Toute ligne d'erreur de l'entrée
+  (`error`, `FAIL`, `panic`, `fatal`, `Traceback`, `ENOENT`, `fichier:12:5:`…)
+  absente du résultat y est remise (30 max), sous `[ccx: N ligne(s) d'erreur
+  récupérée(s)]`. Toujours après un échec ; après un succès aussi, sauf pour les
+  listings, recherches et sorties `git` (un fichier `not-found.tsx` ou un commit
+  « fix error handling » ne sont pas des erreurs). Un
+  échec sur une commande dont le processeur ne gère pas les échecs passe par le
+  processeur générique.
+
+- **Aucun caractère de contrôle, même entre apostrophes.** La commande réécrite
+  garde l'originale en commentaire (`# 'git log'`) pour que la validation et le
+  classifieur voient ce qui s'exécute. Un commentaire shell s'arrête au premier
+  retour à la ligne physique : un `\n` caché dans un argument cité ferait sortir
+  la suite du commentaire en commande libre. Tout caractère de contrôle (`\n`,
+  `\r`, NUL…) et les séparateurs de ligne Unicode (NEL, LS, PS) rendent donc la
+  commande inéligible, et la réécriture refuse de toute façon une entrée
+  multi-ligne (double barrière, test de non-régression).
+
+Une sortie compressée se termine par une ligne :
+`[ccx: sortie compressée 12630→1159 car. (git) — CCX_RAW=1 git log pour la sortie brute]`.
+
+Gains mesurés sur ce dépôt : `git log` 12 630 → 1 159 caractères (−91 %),
+`rg -n function hooks` −56 %, `find . -type f` −45 %. Les diffs gardent toutes
+leurs lignes par choix : sous 20 % de gain, la sortie brute est rendue.
+
+**Contournements.** `CCX_RAW=1 <commande>` : sortie brute pour cette commande.
+`CCX_COMPRESS=off` : compression coupée. Profil `minimal` ou `CCX_DISABLED=1` :
+coupée aussi.
+
+| Processeur | Commandes | Ce qui est fait |
+|---|---|---|
+| `git` | `git status`, `diff`, `show`, `log` | status groupé par dossier, sans les conseils `git` ; diff : toutes les lignes `+`/`-`, `@@` et de contexte gardées, lignes `index` retirées, fichiers de verrouillage (`package-lock.json`, `bun.lock`, `go.sum`, `Cargo.lock`, `pnpm-lock.yaml`…) résumés en une ligne ; log : `hash7 sujet` par commit, tous les commits, seulement sans `-n`/format/patch explicite |
+| `gotest` | `go test` | tests et paquets réussis comptés ; chaque bloc `--- FAIL`, panic, erreur de build et ligne `FAIL` gardés |
+| `jstest` | `bun test`, `vitest run`, `jest`, `cargo test` | lignes de réussite comptées ; échecs, diffs attendu/reçu, piles et résumé final gardés |
+| `build` | `next build`, `tsc`, `npm/bun/pnpm/yarn build`, `go build`, `cargo build/check` | progression retirée ; table des routes gardée ; 5 premiers avertissements, les autres comptés ; tous les blocs d'erreur gardés |
+| `lint` | `eslint`, `golangci-lint run`, `go vet`, `cargo clippy` | regroupé par règle : nombre + 3 premières occurrences + totaux ; erreurs de compilation (`typecheck`, rustc) en entier |
+| `docker` | `docker ps/images/build/pull`, `docker compose ps/logs/build/pull` | tables sans ID/COMMAND/CREATED ; build : étapes, erreurs et bloc d'échec gardés, journaux de couche retirés ; logs : 20 premières lignes + blocs d'erreur + 40 dernières |
+| `listing` | `ls`, `find`, `tree` | au-delà de 60 entrées : groupé par dossier (ou extension) avec comptes ; `tree` limité à deux niveaux |
+| `search` | `rg`, `grep` | au-delà de 80 lignes : groupé par fichier, 5 premières par fichier, total ; lignes très longues coupées |
+| `gh` | `gh pr checks/list`, `gh issue list`, `gh run list/view` | checks réussis comptés, échecs et en attente gardés ; listes coupées à 40 lignes avec compte |
+| `generic` | tout échec non géré | barres de progression retirées, lignes identiques repliées `(xN)`, au-delà de 200 lignes : 80 premières + 60 dernières + lignes critiques du milieu |
+
+**Jamais compressé** : ce qui n'est pas sur la liste, toute commande composée,
+une sortie structurée (`--json`…), un flux suivi (`-f`, `--watch`), une commande
+en arrière-plan, une sortie courte ou peu compressible.
+
+**Statistiques.** Chaque commande enveloppée ajoute une ligne à
+`~/.claude/state/ccx/compress-stats.jsonl` : horodatage, deux premiers mots de la
+commande (`git log`, `go test` — jamais d'argument), processeur, tailles avant et
+après, code de sortie. Aucun contenu de sortie. Le fichier est élagué de moitié
+au-delà de 1 Mo. `/rebenga:token-stats [jours]` en fait le bilan.
+
+Tests : `node test.js` lance aussi `test-compress.js` — liste blanche, intégration
+au dispatcher, wrapper (codes de sortie, stderr, erreurs internes) et seuils de
+qualité par processeur sur des sorties réalistes (`tests/compress/`) : chaque
+cas déclare les chaînes qui doivent survivre et le gain minimal attendu, y compris
+des échecs dont l'erreur est enfouie au milieu d'une longue sortie.
+
 ## Étendre
 
 - **Un agent** : `agents/<nom>.md`, frontmatter `name` / `description` / `tools` /
@@ -252,6 +358,7 @@ claude plugin install rebenga@ownconfig
 | `/rebenga:build-fix` | relance le build, délègue à `build-fixer`, preuve verte |
 | `/rebenga:refactor-clean` | code mort, dépendances inutiles, lot par lot, tests verts |
 | `/rebenga:context-budget` | coût estimé du contexte résident, top 3 des économies |
+| `/rebenga:token-stats [jours]` | bilan de la compression des sorties : commandes compressées, tokens économisés (est.), processeurs les plus rentables |
 | `/rebenga:go-review`, `/rebenga:python-review` | revue via l'agent du langage |
 | `/rebenga:migration-check [fichier]` | contrôles statiques, essai `BEGIN…ROLLBACK` (dev par défaut), `sqlc` + `go build`/`go vet` |
 | `/rebenga:deploy-verify [env]` | déploie après accord, puis prouve : services, migrations, santé, proxy, bundle servi, `.env` bien formé |

@@ -63,18 +63,37 @@ function warn(msg) {
 }
 
 /**
- * Emit buffered warnings as hook JSON on stdout: `systemMessage` for the user,
- * `additionalContext` for the model (PreToolUse / PostToolUse only).
+ * Tool-input rewrite requested by a module (PreToolUse only). Patches layer on
+ * top of each other. Never paired with a permission decision: the rewritten
+ * input still goes through the normal permission flow.
  */
-function flushWarnings(hookEventName) {
-  if (!warnings.length) return;
+let updatedInput = null;
+
+function updateInput(patch) {
+  if (patch && typeof patch === 'object') updatedInput = { ...(updatedInput || {}), ...patch };
+}
+
+/**
+ * Emit buffered warnings and any input rewrite as ONE hook JSON on stdout:
+ * `systemMessage` for the user, `additionalContext` for the model
+ * (PreToolUse / PostToolUse only), `updatedInput` (PreToolUse only).
+ * No `permissionDecision` key, ever.
+ */
+function flushOutput(hookEventName) {
+  const rewrite = hookEventName === 'PreToolUse' ? updatedInput : null;
+  if (!warnings.length && !rewrite) return;
   const text = warnings.join('\n\n');
-  const out = { systemMessage: text };
+  const out = {};
+  if (text) out.systemMessage = text;
   if (hookEventName === 'PreToolUse' || hookEventName === 'PostToolUse') {
-    out.hookSpecificOutput = { hookEventName, additionalContext: text };
+    const specific = { hookEventName };
+    if (text) specific.additionalContext = text;
+    if (rewrite) specific.updatedInput = rewrite;
+    out.hookSpecificOutput = specific;
   }
   process.stdout.write(JSON.stringify(out) + '\n');
   warnings.length = 0;
+  updatedInput = null;
 }
 
 /** Text an Edit / Write / MultiEdit call is about to put on disk. */
@@ -163,6 +182,7 @@ function tilde(p) {
 }
 
 module.exports = {
-  profile, enabled, readState, writeState, deny, warn, flushWarnings, newTexts,
+  profile, enabled, readState, writeState, deny, warn, updateInput, flushOutput,
+  flushWarnings: flushOutput, newTexts,
   findUp, gitRoot, run, tilde, ensureDir, STATE_DIR,
 };

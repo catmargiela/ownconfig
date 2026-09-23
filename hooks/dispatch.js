@@ -17,8 +17,10 @@ const EVENTS = {
   // Refus sur le contenu d'abord : un secret ou une migration cassée se refuse
   // avant que le fact-forcing ne consomme son unique passage.
   'pre-edit': ['./lib/secret-guard', './lib/migration-guard', './lib/pre-edit'],
-  // L'hygiène ne fait qu'avertir : elle passe en dernier, après tout refus.
-  'pre-bash': ['./lib/secret-guard', './lib/pre-bash', './lib/bash-hygiene'],
+  // L'hygiène ne fait qu'avertir, après tout refus. La compression passe en
+  // DERNIER : un refus (`deny`) termine le process en sortie 2 avant elle, donc
+  // une commande refusée n'est jamais réécrite.
+  'pre-bash': ['./lib/secret-guard', './lib/pre-bash', './lib/bash-hygiene', './lib/compress'],
   'post-edit': ['./lib/post-edit'],
   // La capture vault passe AVANT les gates : ce qui doit être mémorisé l'est,
   // même si un gate interrompt ensuite la fin de réponse.
@@ -57,9 +59,10 @@ process.stdin.on('end', () => {
       if (process.env.CCX_DEBUG === '1') process.stderr.write(`[ccx:${event}] ${spec}: ${err.message}\n`);
     }
   }
-  // Avertissements non bloquants accumulés par les modules : une seule sortie JSON.
+  // Avertissements et réécriture d'entrée accumulés par les modules : une seule
+  // sortie JSON, jamais de décision de permission.
   try {
-    require('./lib/util').flushWarnings(input.hook_event_name || HOOK_NAMES[event]);
+    require('./lib/util').flushOutput(input.hook_event_name || HOOK_NAMES[event]);
   } catch (err) {
     if (process.env.CCX_DEBUG === '1') process.stderr.write(`[ccx:${event}] warnings: ${err.message}\n`);
   }
