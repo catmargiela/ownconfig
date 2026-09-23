@@ -5,7 +5,7 @@ Configuration personnelle versionnée. Source de vérité : ce dépôt.
 est actif immédiatement, sans réinstallation.
 
 Une mécanique (dispatcher de hooks, profils, fact-forcing, protection des
-garde-fous) et une surface volontairement réduite : 5 agents et 4 skills de base,
+garde-fous) et une surface volontairement réduite : 5 agents et 5 skills de base,
 plus un plugin `rebenga` (14 commandes, 12 agents, 8 skills). Une surface qui ne se
 déclenche jamais est un coût sans contrepartie.
 
@@ -26,7 +26,8 @@ plus récentes sont gardées, les autres fichiers du dossier ne sont jamais touc
 
 Il lie aussi les deux scripts de `bin/` à l'endroit où Claude Code les attend :
 `~/.claude/statusline.sh` et `~/.claude/bin/gh-mcp-headers.sh` (rendus
-exécutables). Si un vrai fichier différent s'y trouve déjà, il est d'abord copié
+exécutables). Chaque `themes/*.json` est lié de la même façon dans
+`~/.claude/themes/`. Si un vrai fichier différent s'y trouve déjà, il est d'abord copié
 dans `~/.claude/backups/` ; identique, il est remplacé sans bruit. `--uninstall`
 retire ces liens comme les autres.
 
@@ -36,12 +37,14 @@ retire ces liens comme les autres.
 |---|---|
 | `CLAUDE.md` | règles chargées à chaque session — 63 lignes, chacune doit se justifier |
 | `agents/` | 5 sous-agents : relecture, sécurité, build, front, tests |
-| `skills/` | 4 workflows déclenchés par leur description : `git-ship`, `verification-loop`, `vault-note`, `project-onboarding` |
+| `skills/` | 5 workflows déclenchés par leur description : `git-ship`, `verification-loop`, `vault-note`, `project-onboarding`, `theme-edit` |
 | `hooks/` | dispatcher + contrôles + pont Obsidian + moniteur de contexte + rappel des fichiers compagnons + compression des sorties Bash (`hooks/lib/compress/`) |
 | `bin/statusline.sh` | barre de statut : dossier, branche git, modèle, jauge de contexte, usage `5h N% · 7j N%`, coût |
 | `bin/gh-mcp-headers.sh` | `headersHelper` du serveur MCP GitHub : lit le jeton de `gh` à chaque connexion, jamais écrit sur disque ; tolère un environnement vide (`HOME` déduit du compte, `gh`/`jq` trouvés par `PATH` puis Homebrew) |
 | `plugins/rebenga/` | plugin local : commandes `rebenga:*`, agents spécialisés, skills TDD et e2e (voir plus bas) |
 | `.claude-plugin/` | marketplace locale `ownconfig` qui publie le plugin |
+| `themes/` | thèmes Claude Code (`portal`, `catppuccin-mocha`, `catppuccin-latte`), liés un par un dans `~/.claude/themes/` ; `/theme` pour choisir |
+| `bin/theme-check.js` | vérifie un thème : forme, clés connues, syntaxe des couleurs, contraste texte / fond ≥ 4.5 (utilisé par la skill `theme-edit`) |
 | `rules/templates/` | modèles de règles **par projet** (jamais installés en global) |
 
 Pas de dossier `commands/` à la racine : une skill se déclenche seule, une

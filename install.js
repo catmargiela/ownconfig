@@ -98,6 +98,14 @@ function linkScript(name, dest) {
   link(src, dest);
 }
 
+/** Thèmes versionnés dans `themes/*.json`, liés un par un dans `~/.claude/themes/`. */
+function themeLinks() {
+  let names = [];
+  try { names = fs.readdirSync(path.join(SRC, 'themes')).filter((f) => f.endsWith('.json')); }
+  catch { /* pas de dossier themes/ */ }
+  return names.map((n) => [path.join(SRC, 'themes', n), path.join(CLAUDE, 'themes', n)]);
+}
+
 /**
  * Garde les `keep` sauvegardes les plus récentes portant `prefix` dans `dir`.
  * Le préfixe contient un horodatage ISO : l'ordre lexical est l'ordre temporel.
@@ -144,12 +152,15 @@ function installFiles() {
     targets.push([path.join(SRC, 'skills', name), path.join(CLAUDE, 'skills', name)]);
   }
 
+  const themes = themeLinks();
   if (UNINSTALL) {
     targets.forEach(([, d]) => unlink(d));
     SCRIPTS.forEach(([, d]) => unlink(d));
+    themes.forEach(([, d]) => unlink(d));
   } else {
     targets.forEach(([s, d]) => link(s, d));
     SCRIPTS.forEach(([n, d]) => linkScript(n, d));
+    themes.forEach(([s, d]) => { backupIfDiffers(s, d); link(s, d); });
   }
 }
 
