@@ -1,6 +1,8 @@
 {
   "name": "rebenga",
-  "description": "Commandes, agents et skills de travail : plan, TDD, build, refactor, revues Go/Python/TS/SQL, e2e, budget de contexte.",
-  "version": "0.1.0",
-  "author": { "name": "catmargiela" }
+  "description": "Commandes, agents et skills de travail : plan, TDD, build, refactor, revues Go/Python/TS/SQL/Rust-Tauri, migrations, déploiement, secrets, e2e, issues, dépôts miroirs, budget de contexte.",
+  "version": "0.2.0",
+  "author": {
+    "name": "catmargiela"
+  }
 }

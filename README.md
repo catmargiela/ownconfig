@@ -7,7 +7,7 @@ est actif immédiatement, sans réinstallation.
 Inspirée de [ECC](https://github.com/affaan-m/ECC) pour sa mécanique (dispatcher
 de hooks, profils, fact-forcing, protection des garde-fous), volontairement pas
 pour son volume : 5 agents et 4 skills de base, plus un plugin `rebenga`
-(6 commandes, 8 agents, 2 skills) au lieu des 68 agents et 286 skills d'ECC. Une
+(9 commandes, 9 agents, 6 skills) au lieu des 68 agents et 286 skills d'ECC. Une
 surface qui ne se déclenche jamais est un coût sans contrepartie.
 
 ## Installation
@@ -46,8 +46,8 @@ La rigueur se règle par une variable d'environnement, sans toucher à la config
 
 | `CC_PROFILE` | Comportement |
 |---|---|
-| `minimal` | refus durs seulement (`--no-verify`, `push --force`, `curl \| sh`) |
-| `standard` | *(défaut)* + protection des garde-fous, fact-forcing sur commandes destructives, gate qualité sur `Stop` |
+| `minimal` | refus durs seulement (`--no-verify`, `push --force`, `curl \| sh`, secret écrit en clair) |
+| `standard` | *(défaut)* + protection des garde-fous, garde des migrations, avertissements d'hygiène Bash, fact-forcing sur commandes destructives, gate qualité sur `Stop` |
 | `strict` | + fact-forcing sur la première écriture de **chaque** fichier |
 
 ```bash
@@ -56,6 +56,7 @@ CCX_DISABLED=1 claude         # tout couper
 ```
 
 Échappatoires ciblées : `CCX_ALLOW_CONFIG=1` (autoriser une édition de config),
+`CCX_ALLOW_MIGRATION=1` (passer outre la garde des migrations),
 `CCX_NO_TYPECHECK=1`, `CCX_DEBUG=1` (voir les erreurs internes des hooks).
 
 ## Hooks
@@ -65,8 +66,8 @@ qu'un process par contrôle enregistré.
 
 | Événement | Contrôle |
 |---|---|
-| `PreToolUse` Edit/Write | refuse d'éditer une config de lint/format/types ; fact-forcing (strict) |
-| `PreToolUse` Bash | refus durs ; fact-forcing sur commande destructive |
+| `PreToolUse` Edit/Write | refuse un secret écrit en clair (`secret-guard`) ; refuse une migration goose avec `;` en commentaire ou sans `Down`, avertit sur `DROP` sans `IF EXISTS` et AND/OR non parenthésés (`migration-guard`) ; refuse d'éditer une config de lint/format/types ; fact-forcing (strict) |
+| `PreToolUse` Bash | refuse un secret écrit dans un fichier ; refus durs ; fact-forcing sur commande destructive ; avertissements d'hygiène : glob zsh sans correspondance, guillemets imbriqués dans `ssh`, statut lu après un pipe sans `pipefail`, `sleep` long (`bash-hygiene`) |
 | `PostToolUse` Edit/Write | empile les fichiers touchés (aucun travail lourd ici) |
 | `PreCompact` | écrit l'état de la session dans le vault Obsidian |
 | `Stop` | capture vault, puis format + typecheck + `console.log` en un lot, puis mesure du contexte |
@@ -79,6 +80,10 @@ Deux invariants :
 2. **Aucun gate ne boucle.** Le fact-forcing ne se déclenche qu'une fois par
    cible et par session ; le gate de typecheck est plafonné à 3 relances et
    ignore une signature d'erreur déjà vue.
+
+Les avertissements non bloquants sont regroupés par le dispatcher et émis en un
+seul JSON (`systemMessage` pour toi, `additionalContext` pour le modèle), une
+fois par cible et par session.
 
 ### Le fact-forcing
 
@@ -208,10 +213,26 @@ claude plugin install rebenga@ownconfig
 | `/rebenga:refactor-clean` | code mort, dépendances inutiles, lot par lot, tests verts |
 | `/rebenga:context-budget` | coût estimé du contexte résident, top 3 des économies |
 | `/rebenga:go-review`, `/rebenga:python-review` | revue via l'agent du langage |
+| `/rebenga:migration-check [fichier]` | contrôles statiques, essai `BEGIN…ROLLBACK` (dev par défaut), `sqlc` + `go build`/`go vet` |
+| `/rebenga:deploy-verify [env]` | déploie après accord, puis prouve : services, migrations, santé, proxy, bundle servi, `.env` bien formé |
+| `/rebenga:env-set <CLE>` | pose ou fait tourner un secret dans un `.env` sans que la valeur apparaisse nulle part |
 
 Agents appelables directement ou par délégation automatique :
-`typescript-reviewer`, `database-reviewer` (SQL, migrations, ORM), `e2e-runner`,
-`tdd-guide`. Skills : `tdd-workflow`, `e2e-testing`.
+`typescript-reviewer`, `database-reviewer` (SQL, migrations, ORM),
+`rust-tauri-reviewer` (Rust, Tauri v2), `e2e-runner`, `tdd-guide`.
+
+| Skill | Rôle |
+|---|---|
+| `tdd-workflow` | boucle rouge → vert → refactor, preuve à chaque étape |
+| `e2e-testing` | patterns Playwright, anti-instabilité |
+| `prod-e2e` | suite Playwright versionnée contre la prod, comptes `e2e-*` jetables |
+| `issue-batch` | lot d'issues GitHub : implémentation, revue, fermeture, passage à Done dans Projects |
+| `mirror-sync` | un module dupliqué entre deux dépôts : divergences, patch appliqué des deux côtés |
+| `tauri-release` | release Tauri v2 via tauri-action : versions, signature, `latest.json`, runners |
+
+Tout ce qui est propre à un projet (services attendus, URL de santé, paire de
+dépôts miroirs) est lu dans le projet lui-même — son `CLAUDE.md` ou ses scripts —
+jamais écrit dans ce dépôt public.
 
 Après modification du plugin : `claude plugin marketplace update ownconfig`.
 

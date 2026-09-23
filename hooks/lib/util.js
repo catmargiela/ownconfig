@@ -52,6 +52,43 @@ function deny(reason) {
   process.exit(2);
 }
 
+/**
+ * Non-blocking warnings. Several modules share one process, and stdout must hold
+ * a single JSON object: modules only buffer here, the dispatcher flushes once.
+ */
+const warnings = [];
+
+function warn(msg) {
+  if (msg && !warnings.includes(msg)) warnings.push(msg);
+}
+
+/**
+ * Emit buffered warnings as hook JSON on stdout: `systemMessage` for the user,
+ * `additionalContext` for the model (PreToolUse / PostToolUse only).
+ */
+function flushWarnings(hookEventName) {
+  if (!warnings.length) return;
+  const text = warnings.join('\n\n');
+  const out = { systemMessage: text };
+  if (hookEventName === 'PreToolUse' || hookEventName === 'PostToolUse') {
+    out.hookSpecificOutput = { hookEventName, additionalContext: text };
+  }
+  process.stdout.write(JSON.stringify(out) + '\n');
+  warnings.length = 0;
+}
+
+/** Text an Edit / Write / MultiEdit call is about to put on disk. */
+function newTexts(toolInput) {
+  const ti = toolInput || {};
+  const out = [];
+  if (typeof ti.content === 'string') out.push(ti.content);
+  if (typeof ti.new_string === 'string') out.push(ti.new_string);
+  if (Array.isArray(ti.edits)) {
+    for (const e of ti.edits) if (e && typeof e.new_string === 'string') out.push(e.new_string);
+  }
+  return out;
+}
+
 /** Walk up from `start` looking for a file, stopping at the filesystem root. */
 function findUp(start, names) {
   let dir = start;
@@ -91,4 +128,7 @@ function tilde(p) {
   return p.startsWith(home) ? p.replace(home, '~') : p;
 }
 
-module.exports = { profile, enabled, readState, writeState, deny, findUp, run, tilde, ensureDir, STATE_DIR };
+module.exports = {
+  profile, enabled, readState, writeState, deny, warn, flushWarnings, newTexts,
+  findUp, run, tilde, ensureDir, STATE_DIR,
+};
