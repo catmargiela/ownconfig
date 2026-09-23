@@ -174,6 +174,31 @@ compaction, donc se repaie à chaque tour.
 Après ajout d'un agent ou d'une skill, relancer `node install.js` pour poser le
 lien. Modifier un fichier existant ne demande rien.
 
+## Plugin `rebenga`
+
+Commandes, agents et skills de travail, livrés comme plugin local (préfixe
+`rebenga:`, donc aucun conflit avec les commandes intégrées). Source :
+`plugins/rebenga/`, marketplace locale : `.claude-plugin/marketplace.json`.
+
+```bash
+claude plugin marketplace add ~/.claude-config
+claude plugin install rebenga@ownconfig
+```
+
+| Commande | Rôle |
+|---|---|
+| `/rebenga:plan "<feature>"` | agent `planner` → mode plan → validation avant tout code |
+| `/rebenga:build-fix` | relance le build, délègue à `build-fixer`, preuve verte |
+| `/rebenga:refactor-clean` | code mort, dépendances inutiles, lot par lot, tests verts |
+| `/rebenga:context-budget` | coût estimé du contexte résident, top 3 des économies |
+| `/rebenga:go-review`, `/rebenga:python-review` | revue via l'agent du langage |
+
+Agents appelables directement ou par délégation automatique :
+`typescript-reviewer`, `database-reviewer` (SQL, migrations, ORM), `e2e-runner`,
+`tdd-guide`. Skills : `tdd-workflow`, `e2e-testing`.
+
+Après modification du plugin : `claude plugin marketplace update ownconfig`.
+
 ## Ce qui reste volontairement local
 
 Les règles de langage vivent dans le projet (`.claude/rules/`), pas ici. Une
