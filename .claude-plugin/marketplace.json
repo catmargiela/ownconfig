@@ -1,0 +1,16 @@
+{
+  "name": "ownconfig",
+  "owner": {
+    "name": "catmargiela"
+  },
+  "plugins": [
+    {
+      "name": "rebenga",
+      "source": "./plugins/rebenga",
+      "description": "Commandes, agents et skills de travail : plan, TDD, build, refactor, revues Go/Python/TS/SQL, e2e, budget de contexte."
+    }
+  ],
+  "metadata": {
+    "description": "Marketplace locale de ma config Claude Code (plugin rebenga)."
+  }
+}
