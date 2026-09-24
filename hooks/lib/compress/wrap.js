@@ -8,6 +8,10 @@
  * Runs the command in the user's shell, stdin inherited, stdout and stderr
  * captured SEPARATELY, and prints each one condensed on its own stream. The
  * exit code is the command's (a signal gives 128 + n). Rules:
+ *   - engine (CCX_COMPRESS_ENGINE=auto|node|python, default auto): the Node
+ *     engine (engine.js) for commands it has a dedicated processor for; the
+ *     vendored token-saver processors (python.js) for the others, then Node
+ *     if Python is unavailable, fails, or saves too little;
  *   - small output (< 2000 chars) or saving under 20 % → raw output, unchanged;
  *   - otherwise one footer line on stdout, with the way to get the raw output;
  *   - a command that is no longer eligible runs as is, output untouched;
@@ -18,11 +22,10 @@ const fs = require('fs');
 const os = require('os');
 const { spawn } = require('child_process');
 const { eligible, parse } = require('./policy');
-const { compress } = require('./engine');
+const { bestResult } = require('./select');
 const stats = require('./stats');
 
 const MIN_CHARS = 2000;
-const MIN_SAVING = 0.2;
 const MAX_CAPTURE = 8 * 1024 * 1024;
 const SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
 
@@ -66,24 +69,19 @@ function footer(cmd, before, after, name) {
   return `[ccx: sortie compressée ${before}→${after} car. (${name}) — CCX_RAW=1 ${cmd.trim()} pour la sortie brute]\n`;
 }
 
-/** Compressed { stdout, stderr, before, after, processor }, or null for "print raw". */
+/** Compressed { stdout, stderr, before, after, processor, engine }, or null for "print raw". */
 function condense(cmd, processor, bufs, exitCode) {
   const raw = { stdout: asText(bufs.stdout), stderr: asText(bufs.stderr) };
   if (raw.stdout === null || raw.stderr === null) return null;
   const before = raw.stdout.length + raw.stderr.length;
-  if (before < MIN_CHARS) return { before, after: before, processor, skipped: true };
-  const out = {};
-  let name = processor;
-  for (const stream of ['stdout', 'stderr']) {
-    const r = compress(cmd, raw[stream], { exitCode, stream, processor });
-    out[stream] = r.text;
-    if (r.changed) name = r.processor;
-  }
-  const after = out.stdout.length + out.stderr.length;
-  if (after > before * (1 - MIN_SAVING)) return { before, after: before, processor: name, skipped: true };
+  const skipped = { before, after: before, processor, engine: 'none', skipped: true };
+  if (before < MIN_CHARS) return skipped;
+  const r = bestResult(cmd, processor, raw, exitCode, before);
+  if (!r) return skipped;
+  const out = { stdout: r.stdout, stderr: r.stderr };
   const sep = out.stdout && !out.stdout.endsWith('\n') ? '\n' : '';
-  out.stdout += sep + footer(cmd, before, after, name);
-  return { ...out, before, after, processor: name };
+  out.stdout += sep + footer(cmd, before, r.after, r.name);
+  return { ...out, before, after: r.after, processor: r.name, engine: r.engine };
 }
 
 function finish(cmd, processor, bufs, exitCode) {
@@ -98,7 +96,7 @@ function finish(cmd, processor, bufs, exitCode) {
   }
   if (result) {
     stats.record({ ts: new Date().toISOString(), cmd: stats.label(parse(cmd)), processor: result.processor,
-      before: result.before, after: result.after, exit: exitCode });
+      engine: result.engine, before: result.before, after: result.after, exit: exitCode });
   }
   process.exitCode = exitCode;
 }

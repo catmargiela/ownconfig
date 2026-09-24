@@ -29,7 +29,7 @@ function check(label, actual, expected) {
 
 // ---------------------------------------------------------------- modules
 group('Compression : chargement des modules');
-const files = ['index.js', 'policy.js', 'engine.js', 'text.js', 'stats.js',
+const files = ['index.js', 'policy.js', 'policy-families.js', 'engine.js', 'python.js', 'select.js', 'text.js', 'stats.js',
   ...fs.readdirSync(path.join(LIB, 'processors')).map((f) => path.join('processors', f))];
 for (const f of files) {
   let err = null;
@@ -88,6 +88,101 @@ const REFUSED = ['git push', 'git commit -m x', 'git checkout .', 'rm -rf dist',
   '/tmp/x/git status', 'node wrap.js Z2l0', 'ls # commentaire', 'python3', 'gh run view --log', 'docker build --push .'];
 for (const c of REFUSED) check(`non réécrite : ${JSON.stringify(c)}`, eligible(c).ok, false);
 
+group('Compression : familles token-saver (lecture, build, test)');
+const FAMILY_ALLOWED = ['kubectl get pods', 'kubectl -n prod get pods -o wide', 'kubectl describe pod api-1',
+  'kubectl logs api-1 --tail 200', 'kubectl logs -p api-1', 'kubectl top pods -A', 'helm list -A', 'helm status app',
+  'helm template ./chart', 'helm history app', 'terraform plan', 'terraform -chdir=infra plan', 'terraform validate',
+  'terraform fmt -check', 'terraform show', 'tofu plan', 'pulumi preview', 'cdktf synth', 'cdktf diff',
+  'ansible-playbook site.yml --check', 'cargo fmt --check', 'npm ci', 'pnpm install --frozen-lockfile',
+  'bun install --frozen-lockfile', 'yarn install --immutable', 'npm ls', 'npm outdated', 'npm audit', 'pnpm outdated',
+  'yarn audit', 'bun pm ls', 'pip list', 'pip3 freeze', 'pip check', 'poetry show', 'uv pip list', 'mvn test',
+  'mvn clean verify', 'gradle build', './gradlew :app:test', './mvnw package', 'just --list', 'mise ls',
+  'nix flake show', 'nix flake check', 'jq .name package.json', "yq '.services' compose.yaml",
+  'systemctl status nginx', 'journalctl -u nginx -n 200', 'docker logs api --tail 100', 'df -h', 'du -sh .',
+  'free -m', 'ps aux', 'uname -a'];
+for (const c of FAMILY_ALLOWED) check(`réécrite : ${c}`, eligible(c).ok, true);
+const FAMILY_REFUSED = [
+  // injection around an allowed command
+  'kubectl get pods; rm -rf x', 'terraform plan && terraform apply', 'helm list | sh', 'kubectl get pods || true',
+  'kubectl get pods > pods.txt', 'terraform plan $(id)', 'KUBECONFIG=x kubectl get pods', "kubectl get 'a\nb'",
+  "jq '.a\n' f.json", 'kubectl get pods &',
+  // kubectl: writes, interactive, streaming
+  'kubectl delete pod x', 'kubectl apply -f x.yaml', 'kubectl create ns x', 'kubectl exec -it api -- sh',
+  'kubectl port-forward svc/api 8080:80', 'kubectl edit deploy api', 'kubectl rollout restart deploy/api',
+  'kubectl scale deploy api --replicas=0', 'kubectl logs -f api', 'kubectl logs api --follow', 'kubectl logs -pf api',
+  'kubectl get pods -w', 'kubectl get pods --watch', 'kubectl get secret -o json', 'kubectl --kubeconfig x get pods',
+  'kubectl get --raw /api', 'kubectl get pods --as admin',
+  // helm
+  'helm install app ./chart', 'helm upgrade app ./chart', 'helm uninstall app', 'helm rollback app 1',
+  'helm template ./chart --post-renderer ./x', 'helm list -o json',
+  // terraform / tofu / pulumi / cdktf / ansible
+  'terraform apply', 'terraform apply -auto-approve', 'terraform destroy', 'terraform init', 'terraform import a b',
+  'terraform plan -out=tf.plan', 'terraform plan -json', 'terraform fmt', 'terraform state rm a', 'tofu apply',
+  'pulumi up', 'pulumi destroy', 'pulumi preview --refresh', 'cdktf deploy', 'ansible-playbook site.yml',
+  'ansible-playbook site.yml --check --ask-pass', 'ansible-playbook site.yml --check --step',
+  // package managers: installs of new code, global, fixes
+  'npm install left-pad', 'npm i -g x', 'npm install', 'npm i', 'npm ci -g', 'npm audit fix', 'pnpm install',
+  'pnpm add x', 'pnpm install --frozen-lockfile x', 'bun install', 'bun add x', 'yarn install', 'yarn add x',
+  'npm ls -g', 'pip install x', 'pip uninstall x', 'poetry install', 'uv pip install x', 'cargo fmt',
+  // jvm, task runners, nix
+  'mvn deploy', 'mvn install', 'mvn exec:java', 'mvn', 'gradle publish', './gradlew bootRun',
+  './gradlew test --continuous', 'gradle build --scan', 'just deploy', 'just', 'mise install', 'mise use node@22',
+  'nix flake update', 'nix run .', 'nix flake check --commit-lock-file',
+  // jq / yq: in place, no file, environment
+  'jq -i .a f.json', 'yq -i .a f.yaml', 'yq --inplace .a f.yaml', 'jq .a', 'jq -n env', 'jq env f.json',
+  "jq '$ENV.HOME' f.json", "yq 'strenv(HOME)' f.yaml",
+  // system
+  'systemctl restart nginx', 'systemctl stop nginx', 'journalctl -f', 'journalctl --follow', 'journalctl -xef',
+  'journalctl --vacuum-size=1G', 'docker logs -f api', 'docker logs --follow api', 'docker logs -tf api',
+  // excluded families
+  'curl https://example.com', 'wget https://example.com', 'ssh host ls', 'scp a host:b', 'psql -c x', 'env',
+  'printenv', 'cat package.json', 'aws s3 ls'];
+for (const c of FAMILY_REFUSED) check(`non réécrite : ${JSON.stringify(c)}`, eligible(c).ok, false);
+check('familles sans processeur Node dédié → generic (token-saver en premier)',
+  ['kubectl get pods', 'terraform plan', 'mvn test', 'npm ci', 'jq .a f.json'].map((c) => eligible(c).processor),
+  ['generic', 'generic', 'generic', 'generic', 'generic']);
+check('docker logs → processeur Node docker', eligible('docker logs api').processor, 'docker');
+
+group('Compression : revue de sécurité (régressions)');
+const REVIEW = {
+  // ps must never print the environment of other processes (secrets)
+  'ps : environnement refusé': {
+    ok: ['ps aux', 'ps axu', 'ps -o pid,command', 'ps -o user,pid,etime', 'ps -p 123', 'ps -ax'],
+    refused: ['ps eww', 'ps e', 'ps auxe', 'ps aux e', 'ps -e', 'ps -ef', 'ps -eww', 'ps -axe', 'ps -o environ',
+      'ps -o pid,env', 'ps -O env', 'ps -oenv', 'ps -o=environ', 'ps --format env', 'ps --format=pid,environ', 'ps -o'],
+  },
+  // yq writes files with -i, -s, --split-exp
+  'yq : écriture refusée': {
+    ok: ['yq .a f.yaml', 'yq e .a f.yaml', "yq '.services' compose.yaml other.yaml"],
+    refused: ['yq -s .a f.yaml', "yq -s '.name' f.yaml", 'yq --split-exp .a f.yaml', 'yq --split-exp=.a f.yaml',
+      'yq --split-exp-file x f.yaml', 'yq -n .a', 'yq -i .a f.yaml', 'yq --inplace .a f.yaml', 'yq -is .a f.yaml',
+      'yq env f.yaml', "yq 'strenv(A)' f.yaml", "yq '$ENV.A' f.yaml", 'yq .a'],
+  },
+  // maven / gradle: code or configuration from outside the project
+  'mvn / gradle : extensions, settings, init scripts refusés': {
+    ok: ['mvn test', 'mvn clean verify -DskipITs', './gradlew :app:test', 'gradle build --offline'],
+    refused: ['mvn -Dmaven.ext.class.path=x.jar test', 'mvn -D maven.ext.class.path=x.jar test',
+      'mvn test -Dmaven.ext.class.path=/tmp/x.jar', 'mvn -s s.xml test', 'mvn --settings=s.xml test', 'mvn -ss.xml test',
+      'mvn -gs g.xml test', 'mvn --global-settings g.xml test', 'mvn -t t.xml test', 'mvn --toolchains=t.xml test',
+      'gradle --init-script i.gradle build', 'gradle --init-script=i.gradle build', 'gradle -I i.gradle build',
+      './gradlew -Ii.gradle test', 'gradle -c s.gradle build', 'gradle --settings-file s.gradle build',
+      'gradle -g /tmp/h build', 'gradle --gradle-user-home=/tmp/h build', './gradlew -g/tmp/h test'],
+  },
+  // docker: never another daemon
+  'docker : autre démon refusé': {
+    ok: ['docker logs api', 'docker logs api --tail 100', 'docker ps', 'docker compose logs api'],
+    refused: ['docker logs -H tcp://x api', 'docker logs --host=tcp://x api', 'docker logs --host tcp://x api',
+      'docker logs --context prod api', 'docker logs -c x api', 'docker logs -Htcp://x api', 'docker ps -H tcp://x',
+      'docker ps --context prod', 'docker images --host tcp://x', 'docker build --context prod .',
+      'docker compose --context prod logs', 'docker -H x ps', 'docker --context prod logs api',
+      'docker-compose --host tcp://x ps', 'docker logs --config /tmp/c api'],
+  },
+};
+for (const [name, { ok, refused }] of Object.entries(REVIEW)) {
+  for (const c of ok) check(`${name} — réécrite : ${c}`, eligible(c).ok, true);
+  for (const c of refused) check(`${name} — non réécrite : ${JSON.stringify(c)}`, eligible(c).ok, false);
+}
+
 // ---------------------------------------------------------------- dispatcher
 group('Compression : intégration au dispatcher');
 const pb = (command, env = {}, extra = {}) => {
@@ -139,7 +234,7 @@ for (const f of ['a.ts', 'b.ts', 'c.md']) fs.writeFileSync(path.join(small, f), 
 const direct = spawnSync('/bin/sh', ['-c', 'ls'], { cwd: small, encoding: 'utf8' }).stdout;
 check('petite sortie : identique à la commande seule', wrap('ls', small).out, direct);
 const found = wrap('find . -type f', big);
-check('grosse sortie : compressée + pied de page', [found.code, /\[ccx: sortie compressée \d+→\d+ car\. \(listing\) — CCX_RAW=1 find \. -type f pour la sortie brute\]\n$/.test(found.out)], [0, true]);
+check('grosse sortie : compressée + pied de page', [found.code, /\[ccx: sortie compressée \d+→\d+ car\. \(node:listing\) — CCX_RAW=1 find \. -type f pour la sortie brute\]\n$/.test(found.out)], [0, true]);
 const notRepo = wrap('git log', HOME);
 check('échec : code de sortie conservé (git hors dépôt → 128)', notRepo.code, 128);
 check('échec : erreur sur stderr, stdout vide', [/not a git repository/i.test(notRepo.err), notRepo.out], [true, '']);
@@ -150,8 +245,9 @@ check('échec compressé : pied de page présent', /\[ccx: sortie compressée/.t
 const raw = spawnSync('/bin/sh', ['-c', 'find . -type f'], { cwd: big, encoding: 'utf8' }).stdout;
 const preload = path.join(HOME, 'throw.js');
 fs.writeFileSync(preload, `require(${JSON.stringify(path.join(LIB, 'engine.js'))}).compress = () => { throw new Error('boom'); };\n`);
-const broken = wrap('find . -type f', big, ['-r', preload]);
-check('erreur interne → sortie brute intacte, même code', [broken.out === raw, broken.code], [true, 0]);
+const broken = spawnSync('node', ['-r', preload, WRAP, b64('find . -type f')],
+  { cwd: big, encoding: 'utf8', env: { ...ENV, SHELL: '/bin/sh', CCX_COMPRESS_ENGINE: 'node' } });
+check('erreur interne → sortie brute intacte, même code', [broken.stdout === raw, broken.status], [true, 0]);
 check('commande non éligible : exécutée telle quelle', [wrap('echo bonjour').out, wrap('echo bonjour').code], ['bonjour\n', 0]);
 check('signal → 128 + n', wrap('kill -TERM $$').code, 143);
 const bad = spawnSync('node', [WRAP, '***'], { encoding: 'utf8', env: ENV });
@@ -163,7 +259,8 @@ const statsFile = path.join(HOME, '.claude', 'state', 'ccx', 'compress-stats.jso
 const rows = fs.existsSync(statsFile) ? fs.readFileSync(statsFile, 'utf8').trim().split('\n').map((l) => JSON.parse(l)) : [];
 const last = rows.find((r) => r.cmd === 'find' && r.after < r.before);
 check('une ligne JSONL par commande enveloppée', rows.length >= 3, true);
-check('champs exacts, aucun contenu de sortie', last && Object.keys(last).sort(), ['after', 'before', 'cmd', 'exit', 'processor', 'ts']);
+check('champs exacts, aucun contenu de sortie', last && Object.keys(last).sort(), ['after', 'before', 'cmd', 'engine', 'exit', 'processor', 'ts']);
+check('moteur et processeur enregistrés', last && [last.engine, last.processor], ['node', 'node:listing']);
 check('commande réduite aux deux premiers mots', rows.some((r) => r.cmd === 'git log'), true);
 check('aucun nom de fichier stocké', /file-\d{3}/.test(fs.readFileSync(statsFile, 'utf8')), false);
 fs.writeFileSync(statsFile, '{"x":1}\n'.repeat(140000));

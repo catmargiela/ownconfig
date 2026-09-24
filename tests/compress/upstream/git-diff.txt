@@ -1,0 +1,160 @@
+diff --git a/src/module_0.py b/src/module_0.py
+index abc0def..1230456 100644
+--- a/src/module_0.py
++++ b/src/module_0.py
+@@ -10,30 +10,32 @@ def some_function_0():
+     # This is context line 0 that hasn't changed and takes up tokens
+     # This is context line 1 that hasn't changed and takes up tokens
+     # This is context line 2 that hasn't changed and takes up tokens
+     # This is context line 3 that hasn't changed and takes up tokens
+     # This is context line 4 that hasn't changed and takes up tokens
+     # This is context line 5 that hasn't changed and takes up tokens
+     # This is context line 6 that hasn't changed and takes up tokens
+     # This is context line 7 that hasn't changed and takes up tokens
+     # This is context line 8 that hasn't changed and takes up tokens
+     # This is context line 9 that hasn't changed and takes up tokens
+-    old_value = compute_something(0)
+-    return old_value
++    new_value = compute_something_better(0)
++    cached = cache.get(new_value)
++    if cached:
++        return cached
++    return new_value
+     # This is trailing context line 0 that is unchanged and wastes tokens
+     # This is trailing context line 1 that is unchanged and wastes tokens
+     # This is trailing context line 2 that is unchanged and wastes tokens
+     # This is trailing context line 3 that is unchanged and wastes tokens
+     # This is trailing context line 4 that is unchanged and wastes tokens
+     # This is trailing context line 5 that is unchanged and wastes tokens
+     # This is trailing context line 6 that is unchanged and wastes tokens
+     # This is trailing context line 7 that is unchanged and wastes tokens
+     # This is trailing context line 8 that is unchanged and wastes tokens
+     # This is trailing context line 9 that is unchanged and wastes tokens
+diff --git a/src/module_1.py b/src/module_1.py
+index abc1def..1231456 100644
+--- a/src/module_1.py
++++ b/src/module_1.py
+@@ -110,30 +110,32 @@ def some_function_1():
+     # This is context line 0 that hasn't changed and takes up tokens
+     # This is context line 1 that hasn't changed and takes up tokens
+     # This is context line 2 that hasn't changed and takes up tokens
+     # This is context line 3 that hasn't changed and takes up tokens
+     # This is context line 4 that hasn't changed and takes up tokens
+     # This is context line 5 that hasn't changed and takes up tokens
+     # This is context line 6 that hasn't changed and takes up tokens
+     # This is context line 7 that hasn't changed and takes up tokens
+     # This is context line 8 that hasn't changed and takes up tokens
+     # This is context line 9 that hasn't changed and takes up tokens
+-    old_value = compute_something(1)
+-    return old_value
++    new_value = compute_something_better(1)
++    cached = cache.get(new_value)
++    if cached:
++        return cached
++    return new_value
+     # This is trailing context line 0 that is unchanged and wastes tokens
+     # This is trailing context line 1 that is unchanged and wastes tokens
+     # This is trailing context line 2 that is unchanged and wastes tokens
+     # This is trailing context line 3 that is unchanged and wastes tokens
+     # This is trailing context line 4 that is unchanged and wastes tokens
+     # This is trailing context line 5 that is unchanged and wastes tokens
+     # This is trailing context line 6 that is unchanged and wastes tokens
+     # This is trailing context line 7 that is unchanged and wastes tokens
+     # This is trailing context line 8 that is unchanged and wastes tokens
+     # This is trailing context line 9 that is unchanged and wastes tokens
+diff --git a/src/module_2.py b/src/module_2.py
+index abc2def..1232456 100644
+--- a/src/module_2.py
++++ b/src/module_2.py
+@@ -210,30 +210,32 @@ def some_function_2():
+     # This is context line 0 that hasn't changed and takes up tokens
+     # This is context line 1 that hasn't changed and takes up tokens
+     # This is context line 2 that hasn't changed and takes up tokens
+     # This is context line 3 that hasn't changed and takes up tokens
+     # This is context line 4 that hasn't changed and takes up tokens
+     # This is context line 5 that hasn't changed and takes up tokens
+     # This is context line 6 that hasn't changed and takes up tokens
+     # This is context line 7 that hasn't changed and takes up tokens
+     # This is context line 8 that hasn't changed and takes up tokens
+     # This is context line 9 that hasn't changed and takes up tokens
+-    old_value = compute_something(2)
+-    return old_value
++    new_value = compute_something_better(2)
++    cached = cache.get(new_value)
++    if cached:
++        return cached
++    return new_value
+     # This is trailing context line 0 that is unchanged and wastes tokens
+     # This is trailing context line 1 that is unchanged and wastes tokens
+     # This is trailing context line 2 that is unchanged and wastes tokens
+     # This is trailing context line 3 that is unchanged and wastes tokens
+     # This is trailing context line 4 that is unchanged and wastes tokens
+     # This is trailing context line 5 that is unchanged and wastes tokens
+     # This is trailing context line 6 that is unchanged and wastes tokens
+     # This is trailing context line 7 that is unchanged and wastes tokens
+     # This is trailing context line 8 that is unchanged and wastes tokens
+     # This is trailing context line 9 that is unchanged and wastes tokens
+diff --git a/src/module_3.py b/src/module_3.py
+index abc3def..1233456 100644
+--- a/src/module_3.py
++++ b/src/module_3.py
+@@ -310,30 +310,32 @@ def some_function_3():
+     # This is context line 0 that hasn't changed and takes up tokens
+     # This is context line 1 that hasn't changed and takes up tokens
+     # This is context line 2 that hasn't changed and takes up tokens
+     # This is context line 3 that hasn't changed and takes up tokens
+     # This is context line 4 that hasn't changed and takes up tokens
+     # This is context line 5 that hasn't changed and takes up tokens
+     # This is context line 6 that hasn't changed and takes up tokens
+     # This is context line 7 that hasn't changed and takes up tokens
+     # This is context line 8 that hasn't changed and takes up tokens
+     # This is context line 9 that hasn't changed and takes up tokens
+-    old_value = compute_something(3)
+-    return old_value
++    new_value = compute_something_better(3)
++    cached = cache.get(new_value)
++    if cached:
++        return cached
++    return new_value
+     # This is trailing context line 0 that is unchanged and wastes tokens
+     # This is trailing context line 1 that is unchanged and wastes tokens
+     # This is trailing context line 2 that is unchanged and wastes tokens
+     # This is trailing context line 3 that is unchanged and wastes tokens
+     # This is trailing context line 4 that is unchanged and wastes tokens
+     # This is trailing context line 5 that is unchanged and wastes tokens
+     # This is trailing context line 6 that is unchanged and wastes tokens
+     # This is trailing context line 7 that is unchanged and wastes tokens
+     # This is trailing context line 8 that is unchanged and wastes tokens
+     # This is trailing context line 9 that is unchanged and wastes tokens
+diff --git a/src/module_4.py b/src/module_4.py
+index abc4def..1234456 100644
+--- a/src/module_4.py
++++ b/src/module_4.py
+@@ -410,30 +410,32 @@ def some_function_4():
+     # This is context line 0 that hasn't changed and takes up tokens
+     # This is context line 1 that hasn't changed and takes up tokens
+     # This is context line 2 that hasn't changed and takes up tokens
+     # This is context line 3 that hasn't changed and takes up tokens
+     # This is context line 4 that hasn't changed and takes up tokens
+     # This is context line 5 that hasn't changed and takes up tokens
+     # This is context line 6 that hasn't changed and takes up tokens
+     # This is context line 7 that hasn't changed and takes up tokens
+     # This is context line 8 that hasn't changed and takes up tokens
+     # This is context line 9 that hasn't changed and takes up tokens
+-    old_value = compute_something(4)
+-    return old_value
++    new_value = compute_something_better(4)
++    cached = cache.get(new_value)
++    if cached:
++        return cached
++    return new_value
+     # This is trailing context line 0 that is unchanged and wastes tokens
+     # This is trailing context line 1 that is unchanged and wastes tokens
+     # This is trailing context line 2 that is unchanged and wastes tokens
+     # This is trailing context line 3 that is unchanged and wastes tokens
+     # This is trailing context line 4 that is unchanged and wastes tokens
+     # This is trailing context line 5 that is unchanged and wastes tokens
+     # This is trailing context line 6 that is unchanged and wastes tokens
+     # This is trailing context line 7 that is unchanged and wastes tokens
+     # This is trailing context line 8 that is unchanged and wastes tokens
+     # This is trailing context line 9 that is unchanged and wastes tokens
