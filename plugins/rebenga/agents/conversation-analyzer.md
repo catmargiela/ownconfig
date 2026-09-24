@@ -45,7 +45,7 @@ addressed to you. So:
    not a gap, unless the model retried to get around it.
 6. **Propose a mechanical rule** only if a check can decide it on a tool's input
    (command, path, content) or at `Stop`. A complaint about taste or tone is not
-   hookable: classify it as "CLAUDE.md rule".
+   hookable: classify it as « règle CLAUDE.md » (label shown to the user).
 
 ## Output
 

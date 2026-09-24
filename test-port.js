@@ -43,11 +43,15 @@ group('Contournement des hooks git');
 for (const c of ['git push --no-verify origin x', 'git merge --no-verify main', 'git rebase --no-verify main',
   'git pull --no-verify', 'HUSKY=0 git commit -m "feat: x"', 'cd a && HUSKY=0 git push',
   'git -c core.hooksPath=/dev/null commit -m x', 'git -c "core.hooksPath=/dev/null" push', 'git -c CORE.HOOKSPATH=x merge y',
-  'git config core.hooksPath /tmp/h', 'git config --local core.hooksPath .nohooks']) {
+  'git config core.hooksPath /tmp/h', 'git config --local core.hooksPath .nohooks',
+  'git commit -m x --no-verif', 'git push --no-v', 'export HUSKY=0; git commit -m x', 'env HUSKY=0 git commit -m x',
+  'HUSKY=0 CI=1 git push', 'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/x git commit -m x',
+  'GIT_CONFIG_PARAMETERS=x git push']) {
   check(`refusé : ${c}`, bash(c).code, 2);
 }
 for (const c of ['git push -n origin x', 'git push origin x', 'git config core.hooksPath', 'git config --get core.hooksPath',
-  'echo "HUSKY=0 git commit"', 'git commit -m "docs: explain --no-verify on push"', 'git log --oneline']) {
+  'echo "HUSKY=0 git commit"', 'git commit -m "docs: explain --no-verify on push"', 'git log --oneline',
+  'HUSKY=0 pnpm run build && git push', 'git log --no-walk', 'git fetch --no-tags']) {
   check(`autorisé : ${c}`, bash(c).code, 0);
 }
 

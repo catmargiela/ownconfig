@@ -120,17 +120,30 @@ const NO_VERIFY_MSG = [
  * dry-run for push); husky switched off; hooks redirected through
  * `core.hooksPath` (config keys are case-insensitive), inline or persisted.
  */
+/** `--no-verify` and every abbreviation git accepts (`--no-v`, `--no-verif`…). */
+const NO_VERIFY = '--no-v(?:e(?:r(?:i(?:f(?:y)?)?)?)?)?(?![\\w-])';
+const GIT_WRITE = '(commit|push|merge|rebase|pull|am|cherry-pick|revert)';
+
 const HOOK_BYPASS = [
-  /\bgit\s+(push|merge|rebase|pull|am|cherry-pick|revert)\b[^|;&]*\s--no-verify\b/,
-  /(^|[;&|]\s*|\s)HUSKY=0\s+(\S+\s+)*git\s/,
+  new RegExp(`\\bgit\\s+(push|merge|rebase|pull|am|cherry-pick|revert)\\b[^|;&]*\\s${NO_VERIFY}`),
+  // Inline prefix: only when HUSKY=0 (and other assignments) directly precede git.
+  /(^|[;&|]\s*|\s)HUSKY=0\s+(\w+=\S*\s+)*git\s/,
+  // Exported: applies to every later command of the script.
+  new RegExp(`\\bexport\\s+HUSKY=0\\b[\\s\\S]*\\bgit\\s+${GIT_WRITE}\\b`),
+];
+
+/** Hooks redirected through configuration: `-c`, `git config`, or GIT_CONFIG_* variables. */
+const HOOKS_PATH = [
   /\bgit\b[^|;&]*\s-c\s*['"]?core\.hookspath\s*=/i,
   /\bgit\s+config\b[^|;&]*\score\.hookspath\s+\S/i,
+  /\bGIT_CONFIG_PARAMETERS=/,
+  /\bGIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+)=/i,
 ];
 
 const HARD_DENY = [
-  ...HOOK_BYPASS.map((re) => ({ re, msg: NO_VERIFY_MSG })),
+  ...[...HOOK_BYPASS, ...HOOKS_PATH].map((re) => ({ re, msg: NO_VERIFY_MSG })),
   {
-    re: /\bgit\s+commit\b[^|;&]*\s(--no-verify|-n)\b/,
+    re: new RegExp(`\\bgit\\s+commit\\b[^|;&]*\\s(${NO_VERIFY}|-n\\b)`),
     msg: [
       '[Bloqué] `git commit --no-verify` désactive les hooks de pré-commit.',
       '',
@@ -185,7 +198,7 @@ function run(input) {
     // A fully quoted `-c "core.hooksPath=…"` vanishes from the stripped command:
     // check the raw one too, outside text arguments (commit messages, echo).
     const bare = stripHeredocs(raw);
-    if (!TEXT_CONTEXT.test(bare) && HOOK_BYPASS.slice(2).some((re) => re.test(bare))) deny(NO_VERIFY_MSG);
+    if (!TEXT_CONTEXT.test(bare) && HOOKS_PATH.some((re) => re.test(bare))) deny(NO_VERIFY_MSG);
   }
 
   if (!enabled(['standard', 'strict'])) return;
@@ -208,4 +221,4 @@ function run(input) {
   deny(destructiveMsg(hit.what));
 }
 
-module.exports = { run, stripQuoted, stripHeredocs, DESTRUCTIVE, RAW_DESTRUCTIVE, TEXT_CONTEXT, HARD_DENY, HOOK_BYPASS };
+module.exports = { run, stripQuoted, stripHeredocs, DESTRUCTIVE, RAW_DESTRUCTIVE, TEXT_CONTEXT, HARD_DENY, HOOK_BYPASS, HOOKS_PATH };
