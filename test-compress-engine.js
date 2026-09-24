@@ -105,11 +105,20 @@ sys.__stdout__.write(",".join(bad))`], { encoding: 'utf8', env: { PATH: process.
   check('aucun module disque/réseau chargé (stats, tracker, delta, updater, sqlite3)', [mods.status, mods.stdout], [0, '']);
 });
 
+// A real old interpreter when the machine has one (macOS ships 3.9), otherwise a
+// modern one whose reported version is lowered to 3.9: the adapter checks
+// sys.version_info at run time, so both exercise the same refusal path.
 const old = spawnSync('/usr/bin/python3', ['-c', 'import sys; print(sys.version_info < (3, 10))'], { encoding: 'utf8' });
-if (!old.error && old.stdout.trim() === 'True') {
-  const r = spawnSync('/usr/bin/python3', ['-I', '-B', ADAPTER], { input: req(), encoding: 'utf8', env: { PATH: '/usr/bin', HOME } });
-  check('python < 3.10 : ok:false, jamais d’exception', [r.status, JSON.parse(r.stdout).ok], [0, false]);
-} else skipped('python < 3.10 : ok:false', 'pas de /usr/bin/python3 < 3.10 sur cette machine');
+const oldRun = !old.error && old.stdout.trim() === 'True'
+  ? { bin: '/usr/bin/python3', args: ['-I', '-B', ADAPTER] }
+  : PYBIN && { bin: PYBIN, args: ['-I', '-B', '-c',
+    `import sys, runpy; sys.version_info = (3, 9, 0, "final", 0); runpy.run_path(${JSON.stringify(ADAPTER)}, run_name="__main__")`] };
+if (oldRun) {
+  const r = spawnSync(oldRun.bin, oldRun.args, { input: req(), encoding: 'utf8', env: { PATH: '/usr/bin', HOME } });
+  let answer = null;
+  try { answer = JSON.parse(r.stdout).ok; } catch { /* reste null */ }
+  check('python < 3.10 : ok:false, jamais d’exception', [r.status, answer], [0, false]);
+} else skipped('python < 3.10 : ok:false', 'aucun interpréteur pour simuler python < 3.10');
 
 require('./tests/compress/engine-wrap')({ ROOT, WRAP, HOME, ENV, PY, check, skipped, group, runAdapter });
 require('./tests/compress/engine-quality')({ PY, check, skipped, group, eligible, parse, compress, compressWithPython, runAdapter });
