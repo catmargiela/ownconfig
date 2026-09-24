@@ -8,8 +8,8 @@
  *
  * Local binaries only (PATH, then ~/.cargo/bin for Rust); a missing tool, a
  * timeout or any failure yields nothing. Nothing is downloaded: `go vet` runs
- * with GOPROXY=off and GOFLAGS=-mod=readonly (a missing module is an error line,
- * never a fetch).
+ * with GOPROXY=off, GOTOOLCHAIN=local and GOFLAGS=-mod=readonly (a missing module
+ * or a newer toolchain named in go.mod is an error line, never a fetch).
  */
 const fs = require('fs');
 const os = require('os');
@@ -19,7 +19,8 @@ const { findUp, run: exec } = require('./util');
 const GO = /\.go$/;
 const RS = /\.rs$/;
 const VET_LINE = /\.go:\d+(:\d+)?: /;
-const NO_NETWORK = { GOPROXY: 'off', GOFLAGS: '-mod=readonly' };
+/** No module fetch, no toolchain download named by a go.mod, no inherited -toolexec. */
+const NO_NETWORK = { GOPROXY: 'off', GOFLAGS: '-mod=readonly', GOTOOLCHAIN: 'local' };
 
 function which(bin, extra = []) {
   const dirs = [...String(process.env.PATH || '').split(path.delimiter), ...extra];
