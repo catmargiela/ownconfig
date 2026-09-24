@@ -56,7 +56,12 @@ function vetGo(files) {
   for (const [root, own] of byRoot(files.filter((f) => GO.test(f)), 'go.mod')) {
     const pkgs = [...new Set(own.map((f) => `./${path.relative(root, path.dirname(f)) || '.'}`))];
     const res = exec(go, ['vet', ...pkgs], { cwd: root, timeout: 45000, env: NO_NETWORK });
-    if (!res.ok) errors.push(...res.out.split('\n').filter((l) => VET_LINE.test(l)));
+    if (res.ok) continue;
+    const located = res.out.split('\n').filter((l) => VET_LINE.test(l));
+    // No file:line (module or toolchain error, timeout): vet did not run. Say so
+    // rather than let the gate pass as if the code had been checked.
+    errors.push(...(located.length ? located
+      : [`go vet n'a pas pu tourner dans ${root} : ${res.out.trim().split('\n')[0] || 'échec sans message'}`]));
   }
   return errors.slice(0, 15);
 }
@@ -70,10 +75,15 @@ function edition(cargoToml) {
 
 function formatRust(files) {
   const rustfmt = which('rustfmt', [path.join(os.homedir(), '.cargo', 'bin')]);
-  if (!rustfmt) return;
-  for (const [root, own] of byRoot(files.filter((f) => RS.test(f)), 'Cargo.toml')) {
+  const rs = files.filter((f) => RS.test(f));
+  if (!rustfmt || !rs.length) return;
+  const groups = byRoot(rs, 'Cargo.toml');
+  for (const [root, own] of groups) {
     exec(rustfmt, ['--edition', edition(path.join(root, 'Cargo.toml')), ...own], { cwd: root, timeout: 20000 });
   }
+  // Outside any crate: still formatted, with the default edition.
+  const loose = rs.filter((f) => ![...groups.values()].some((own) => own.includes(f)));
+  if (loose.length) exec(rustfmt, ['--edition', '2021', ...loose], { timeout: 20000 });
 }
 
 module.exports = { formatGo, vetGo, formatRust };

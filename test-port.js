@@ -45,7 +45,7 @@ for (const c of ['git push --no-verify origin x', 'git merge --no-verify main', 
   'git -c core.hooksPath=/dev/null commit -m x', 'git -c "core.hooksPath=/dev/null" push', 'git -c CORE.HOOKSPATH=x merge y',
   'git config core.hooksPath /tmp/h', 'git config --local core.hooksPath .nohooks',
   'git commit -m x --no-verif', 'git push --no-v', 'export HUSKY=0; git commit -m x', 'env HUSKY=0 git commit -m x',
-  'HUSKY=0 CI=1 git push', 'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/x git commit -m x',
+  'HUSKY=0 CI=1 git push', 'git push "--no-verify" origin x', "git commit '--no-verify' -m x", 'git merge "--no-v" y', 'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/x git commit -m x',
   'GIT_CONFIG_PARAMETERS=x git push']) {
   check(`refusé : ${c}`, bash(c).code, 2);
 }
@@ -80,6 +80,8 @@ check('FR : bug préexistant', keys('Le test rouge est un bug préexistant.'), [
 check('EN : pre-existing + skipping tests', keys('This is pre-existing; skipping the tests for now.'), ['preexisting', 'skip-tests']);
 check('FR : hors périmètre / devrait marcher', keys('Hors périmètre. Ça devrait maintenant marcher.'), ['unrelated', 'should-work']);
 check('réponse prouvée : rien', keys('Tests : 152 réussis, 0 échoués (node test.js).'), []);
+check('description neutre : rien', keys('The pre-existing tests pass and I added two. Le test existant reste vert.'), []);
+check('EN : failure is pre-existing', keys('The CI failure is pre-existing.'), ['preexisting']);
 check('déjà signalé dans la session : ignoré', findPhrases('bug préexistant', { preexisting: 1 }).length, 0);
 const transcript = path.join(TMP, 't.jsonl');
 const line = (role, text) => JSON.stringify({ message: { role, content: [{ type: 'text', text }] } });
@@ -119,6 +121,19 @@ if (!has('go') || !has('gofmt')) { skip++; console.log('    SKIP go absent'); } 
   fs.writeFileSync(bad, 'package pkg\n\nimport "fmt"\n\nfunc F() { fmt.Printf("%s\\n", "x") }\n');
   hook('post-edit', { session_id: 'port-go-ok', tool_name: 'Edit', tool_input: { file_path: bad } });
   check('code sain : Stop passe', hook('stop', { session_id: 'port-go-ok', cwd: mod, hook_event_name: 'Stop' }).code, 0);
+  fs.writeFileSync(bad, 'package pkg\n\nimport "fmt"\n\nfunc F() { fmt.Printf("%d\\n", "x") }\n');
+  hook('post-edit', { session_id: 'port-go-chain', tool_name: 'Edit', tool_input: { file_path: bad } });
+  const chain = hook('stop', { session_id: 'port-go-chain', cwd: mod, hook_event_name: 'Stop', transcript_path: transcript });
+  check('gate bloquant : delivery-check et notification ne tournent pas', [chain.code, /\[Livraison\]/.test(chain.out)], [2, false]);
+  const tooNew = path.join(TMP, 'gonew');
+  fs.mkdirSync(path.join(tooNew, 'p'), { recursive: true });
+  fs.writeFileSync(path.join(tooNew, 'go.mod'), 'module x\n\ngo 1.99\n');
+  fs.writeFileSync(path.join(tooNew, 'p', 'a.go'), 'package p\n');
+  const { vetGo } = require('./hooks/lib/stop-lang');
+  check('go vet impossible (go.mod trop récent) : signalé, jamais un faux vert', /n'a pas pu tourner.*1\.99/.test(vetGo([path.join(tooNew, 'p', 'a.go')]).join('')), true);
+  const loose = path.join(TMP, 'loose.go');
+  fs.writeFileSync(loose, 'package main\nfunc main(){  }\n');
+  check('fichier Go hors module : formaté, pas de vet', [vetGo([loose]), (require('./hooks/lib/stop-lang').formatGo([loose]), fs.readFileSync(loose, 'utf8').includes('func main() {}'))], [[], true]);
   hook('post-edit', { session_id: 'port-go-off', tool_name: 'Edit', tool_input: { file_path: bad } });
   fs.writeFileSync(bad, 'package pkg\n\nimport "fmt"\n\nfunc F() { fmt.Printf("%d\\n", "x") }\n');
   check('CCX_NO_TYPECHECK=1 : go vet sauté', hook('stop', { session_id: 'port-go-off', cwd: mod, hook_event_name: 'Stop' },

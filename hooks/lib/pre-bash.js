@@ -188,10 +188,18 @@ function destructiveMsg(what) {
   ].join('\n');
 }
 
+/**
+ * An option quoted on its own (`"--no-verify"`, `'-c'`) is still an option for
+ * the shell: unquote it before stripping quoted text, or the refusals miss it.
+ */
+function unquoteFlags(command) {
+  return command.replace(/(^|\s)(['"])(-[\w.-]+(?:=[^'"\s]*)?)\2(?=\s|$)/g, '$1$3');
+}
+
 function run(input) {
   const raw = input?.tool_input?.command;
   if (!raw) return;
-  const cmd = stripQuoted(raw);
+  const cmd = stripQuoted(unquoteFlags(raw));
 
   if (enabled(['minimal', 'standard', 'strict'])) {
     for (const rule of HARD_DENY) if (rule.re.test(cmd)) deny(rule.msg);
@@ -221,4 +229,4 @@ function run(input) {
   deny(destructiveMsg(hit.what));
 }
 
-module.exports = { run, stripQuoted, stripHeredocs, DESTRUCTIVE, RAW_DESTRUCTIVE, TEXT_CONTEXT, HARD_DENY, HOOK_BYPASS, HOOKS_PATH };
+module.exports = { run, stripQuoted, stripHeredocs, DESTRUCTIVE, RAW_DESTRUCTIVE, TEXT_CONTEXT, HARD_DENY, HOOK_BYPASS, HOOKS_PATH, unquoteFlags };

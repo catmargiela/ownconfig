@@ -8,14 +8,18 @@
  * for the proof. Never blocks; once per phrase and per session.
  *
  * The answer is read from the tail of the transcript (last 256 KB), never the
- * whole file. Off in `minimal`, with CCX_DISABLED=1 or CCX_DELIVERY_CHECK=off.
+ * whole file; an answer longer than that is cut, fails to parse and is skipped
+ * (the check then looks at the previous one — a missed warning, never a crash).
+ * Off in `minimal`, with CCX_DISABLED=1 or CCX_DELIVERY_CHECK=off.
  */
 const fs = require('fs');
 const { enabled, readState, writeState, warn } = require('./util');
 
 const TAIL = 256 * 1024;
 const PHRASES = [
-  { key: 'preexisting', re: /\b(pre-?existing|already (broken|failing))\b|\bpr[ée]-?existant(e|s|es)?\b|d[ée]j[àa] (cass[ée]|en [ée]chec|rouge)/i, label: 'problème « préexistant »' },
+  // An excuse, not a description: "pre-existing bug", "the failure is pre-existing",
+  // « bug préexistant », « c'était déjà cassé » — never "pre-existing tests pass".
+  { key: 'preexisting', re: /\bpre-?existing (bugs?|issues?|errors?|failures?|problems?)\b|\b(is|are|was|were) (a |an )?pre-?existing\b|\balready (broken|failing)\b|\b(bugs?|probl[èe]mes?|erreurs?|[ée]checs?|d[ée]fauts?) (d[ée]j[àa] )?pr[ée]-?existant(e|s|es)?\b|\b(est|[ée]tait|sont|[ée]taient) (d[ée]j[àa] )?pr[ée]-?existant|d[ée]j[àa] (cass[ée]|en [ée]chec|rouge)/i, label: 'problème « préexistant »' },
   { key: 'skip-tests', re: /\bskip(ping|ped)? (the |these |those )?tests?\b|\b(je )?(saute|ignore|d[ée]sactive|passe) (les |ces )?tests?\b|tests? (saut[ée]s?|ignor[ée]s?|d[ée]sactiv[ée]s?)\b/i, label: 'tests sautés' },
   { key: 'unrelated', re: /\b(unrelated to (my|this|the) change|out of scope)\b|sans rapport avec (mon|ce|le) changement|hors (du )?p[ée]rim[èe]tre|non li[ée]e? (à|au) (mon|ce)/i, label: '« sans rapport avec le changement »' },
   { key: 'should-work', re: /\b(should (now )?work|probably fixed)\b|(devrait|devraient) (maintenant )?(marcher|fonctionner|passer)|normalement (ça|c'est) (bon|corrig[ée])/i, label: '« devrait marcher » sans preuve' },
