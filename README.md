@@ -45,6 +45,8 @@ retire ces liens comme les autres.
 | `.claude-plugin/` | marketplace locale `ownconfig` qui publie le plugin |
 | `themes/` | thèmes Claude Code (`portal`, `catppuccin-mocha`, `catppuccin-latte`), liés un par un dans `~/.claude/themes/` ; `/theme` pour choisir |
 | `bin/theme-check.js` | vérifie un thème : forme, clés connues, syntaxe des couleurs, contraste texte / fond ≥ 4.5 (utilisé par la skill `theme-edit`) |
+| `bin/check-plugin.sh` | contrôle structurel de la marketplace, du plugin et des frontmatters, sans la CLI `claude` (utilisé par la CI) |
+| `.github/workflows/ci.yml` | CI GitHub : `node test.js`, thèmes et manifestes à chaque PR et à chaque push sur `main` |
 | `rules/templates/` | modèles de règles **par projet** (jamais installés en global) |
 
 Pas de dossier `commands/` à la racine : une skill se déclenche seule, une
@@ -59,7 +61,7 @@ La rigueur se règle par une variable d'environnement, sans toucher à la config
 | `CC_PROFILE` | Comportement |
 |---|---|
 | `minimal` | refus durs seulement (`--no-verify`, `push --force`, `curl \| sh`, secret écrit en clair) ; aucune compression des sorties |
-| `standard` | *(défaut)* + protection des garde-fous, garde des migrations, avertissements d'hygiène Bash, fact-forcing sur commandes destructives, gate qualité et rappel des compagnons sur `Stop`, compression des sorties Bash |
+| `standard` | *(défaut)* + protection des garde-fous, garde des migrations, refus des serveurs de dev au premier plan, commit-gate sur le contenu indexé, avertissements d'hygiène Bash, fact-forcing sur commandes destructives, gate qualité et rappel des compagnons sur `Stop`, compression des sorties Bash |
 | `strict` | + fact-forcing sur la première écriture de **chaque** fichier |
 
 ```bash
@@ -81,7 +83,7 @@ qu'un process par contrôle enregistré.
 | Événement | Contrôle |
 |---|---|
 | `PreToolUse` Edit/Write | refuse un secret écrit en clair (`secret-guard`) ; refuse une migration goose avec `;` en commentaire ou sans `Down`, avertit sur `DROP` sans `IF EXISTS` et AND/OR non parenthésés (`migration-guard`) ; refuse d'éditer une config de lint/format/types ; fact-forcing (strict) |
-| `PreToolUse` Bash | refuse un secret écrit dans un fichier ; refus durs ; fact-forcing sur commande destructive ; avertissements d'hygiène : glob zsh sans correspondance, guillemets imbriqués dans `ssh`, statut lu après un pipe sans `pipefail`, `sleep` long (`bash-hygiene`) ; en dernier, réécrit une commande de lecture ou de build éligible pour compresser sa sortie (`compress`, voir plus bas) |
+| `PreToolUse` Bash | refuse un secret écrit dans un fichier ; refus durs ; fact-forcing sur commande destructive ; refuse un serveur ou un watcher au premier plan (`next dev`, `npm run dev`, `vite`, `go run`, `air`, `tauri dev`, `docker compose up` sans `-d`, `nodemon`, `--watch`) sans `run_in_background` (`dev-server-guard`) ; sur `git commit`, refuse un `console.log`/`debugger` ajouté hors tests, un `.go` indexé non gofmt, un message `-m` hors conventional commits, et avertit sur un TODO/FIXME ajouté — contenu indexé seulement, ~30 ms (`commit-gate`) ; avertissements d'hygiène : glob zsh sans correspondance, guillemets imbriqués dans `ssh`, statut lu après un pipe sans `pipefail`, `sleep` long (`bash-hygiene`) ; en dernier, réécrit une commande de lecture ou de build éligible pour compresser sa sortie (`compress`, voir plus bas) |
 | `PostToolUse` Edit/Write | empile les fichiers touchés : lot de la réponse + liste de la session (aucun travail lourd ici) |
 | `PreCompact` | écrit l'état de la session dans le vault Obsidian |
 | `Stop` | capture vault, puis format + typecheck + `console.log` en un lot, puis rappel des fichiers compagnons (`companion-check`), puis mesure du contexte |
@@ -94,7 +96,10 @@ Deux invariants :
 2. **Aucun gate ne boucle.** Le fact-forcing ne se déclenche qu'une fois par
    cible et par session ; le gate de typecheck est plafonné à 3 relances et
    ignore une signature d'erreur déjà vue ; le rappel des compagnons ne
-   revient jamais deux fois pour la même règle dans une session.
+   revient jamais deux fois pour la même règle dans une session. Le
+   commit-gate, lui, se répète tant que le
+   contenu indexé ne change pas : c'est un contrôle de contenu, et corriger le
+   contenu change le verdict.
 
 Les avertissements non bloquants sont regroupés par le dispatcher et émis en un
 seul JSON (`systemMessage` pour toi, `additionalContext` pour le modèle), une
@@ -420,6 +425,13 @@ répétées dans les sessions passées, pour `hookify`).
 Tout ce qui est propre à un projet (services attendus, URL de santé, paire de
 dépôts miroirs) est lu dans le projet lui-même — son `CLAUDE.md` ou ses scripts —
 jamais écrit dans ce dépôt public.
+
+Les commandes que l'on tape soi-même (`plan`, `token-log`, `token-stats`,
+`env-set`, `deploy-verify`, `canary-watch`, `hookify`, `context-budget`,
+`dual-review`, `refactor-clean`) portent `disable-model-invocation: true` : elles
+restent disponibles au clavier, mais leur description n'est plus chargée dans le
+contexte à chaque session. `build-fix`, `migration-check`, `go-review` et
+`python-review` restent invocables par le modèle.
 
 Après modification du plugin : `claude plugin marketplace update ownconfig`.
 

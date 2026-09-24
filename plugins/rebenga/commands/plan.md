@@ -1,5 +1,6 @@
 ---
 description: Explorer le codebase et produire un plan d'implémentation validé avant d'écrire la moindre ligne de code.
+disable-model-invocation: true
 argument-hint: "<fonctionnalité à planifier>"
 ---
 

@@ -1,5 +1,6 @@
 ---
 description: Capture l'état observable d'un site en production puis le compare après un déploiement — statuts, assets, erreurs console, latence, éléments clés — et rend un verdict PASS/FAIL.
+disable-model-invocation: true
 argument-hint: "<url> [--baseline|--compare|--watch]"
 ---
 

@@ -1,5 +1,6 @@
 ---
 description: Liste une par une les commandes Bash passées par la compression des sorties — date, commande, processeur, taille avant/après, gain.
+disable-model-invocation: true
 argument-hint: "[jours, 7 par défaut] [--toutes]"
 ---
 

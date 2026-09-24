@@ -1,5 +1,6 @@
 ---
 description: Déploie avec le script du projet après accord, puis prouve par la sortie des commandes que services, migrations, santé, proxy, bundle et .env sont bons.
+disable-model-invocation: true
 argument-hint: "[environnement, vide = production]"
 ---
 

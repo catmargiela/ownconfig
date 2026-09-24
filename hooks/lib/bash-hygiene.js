@@ -46,7 +46,11 @@ function globMatches(token, cwd) {
  * `*`, sans expansion ($, `, {, ~), sans échappement ni `**`.
  */
 function unmatchedGlobs(cmd, cwd) {
-  const words = stripQuoted(cmd).split(/[\s;&|()<>]+/).filter(Boolean);
+  const stripped = stripQuoted(cmd);
+  // Après un `cd` (ou `pushd`), le glob s'évalue dans un autre dossier que `cwd` :
+  // impossible de savoir s'il correspond, donc on se tait plutôt que d'avertir à tort.
+  if (/(^|[;&|(]\s*)(cd|pushd)\s/.test(stripped)) return [];
+  const words = stripped.split(/[\s;&|()<>]+/).filter(Boolean);
   return words.filter((w) =>
     w.includes('*') && !/[$`{}~\\'"]/.test(w) && !w.includes('**')
     // `$((3*4))` découpé devient `3*4` : de l'arithmétique, pas un glob.

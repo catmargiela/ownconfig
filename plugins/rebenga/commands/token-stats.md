@@ -1,5 +1,6 @@
 ---
 description: Bilan de la compression des sorties Bash — commandes compressées, caractères et tokens économisés, processeurs et commandes les plus rentables.
+disable-model-invocation: true
 argument-hint: "[jours, 7 par défaut]"
 ---
 
