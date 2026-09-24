@@ -1,24 +1,26 @@
 ---
 name: theme-edit
-description: Créer ou modifier un thème Claude Code (couleurs de l'interface, clair ou sombre) ou les couleurs de la barre de statut. À utiliser quand l'utilisateur dit « change la couleur de… », « fais-moi un thème », « modifie le thème », « la couleur X est illisible », ou parle de palette, de contraste ou de couleurs de la statusline.
+description: Create or modify a Claude Code theme (interface colors, light or dark) or the status line colors. Use when the user says « change la couleur de… » / "change the color of…", « fais-moi un thème » / "make me a theme", « modifie le thème » / "edit the theme", « la couleur X est illisible » / "color X is unreadable", or talks about palette, contrast or status line colors.
 ---
 
-# Éditer un thème ou les couleurs
+# Editing a theme or colors
 
-Trois choses différentes portent le nom de « couleur » ; identifier laquelle avant
-de toucher à quoi que ce soit.
+Reply to the user in French.
 
-| Demande | Où | Qui peut le changer |
+Three different things go by the name "color"; identify which one before
+touching anything.
+
+| Request | Where | Who can change it |
 |---|---|---|
-| Couleurs de l'interface (texte, accent, diffs, bordures…) | `themes/<slug>.json` du dépôt de config | toi |
-| Couleurs de la barre de statut | `bin/statusline.sh` du dépôt de config | toi |
-| Couleur de la session (`/color`) | commande de l'utilisateur | **l'utilisateur seulement** : lui dire de taper `/color` |
+| Interface colors (text, accent, diffs, borders…) | `themes/<slug>.json` in the config repo | you |
+| Status line colors | `bin/statusline.sh` in the config repo | you |
+| Session color (`/color`) | user command | **the user only**: tell them to type `/color` |
 
-Les thèmes et la barre de statut vivent dans `~/.claude-config` et sont liés
-dans `~/.claude` par `install.js`. Toujours éditer la copie du dépôt, jamais le
-lien dans `~/.claude`.
+Themes and the status line live in `~/.claude-config` and are linked
+into `~/.claude` by `install.js`. Always edit the repo copy, never the
+link in `~/.claude`.
 
-## Format d'un thème
+## Theme format
 
 ```json
 {
@@ -28,60 +30,60 @@ lien dans `~/.claude`.
 }
 ```
 
-- `base` : `dark`, `light`, `dark-daltonized`, `light-daltonized`, `dark-ansi`,
-  `light-ansi`. Tout ce qui n'est pas dans `overrides` vient de la base.
-- Couleurs : `#RRGGBB`, `#RGB`, `rgb(r,g,b)`, `ansi256(n)`, `ansi:<nom>`
+- `base`: `dark`, `light`, `dark-daltonized`, `light-daltonized`, `dark-ansi`,
+  `light-ansi`. Anything not in `overrides` comes from the base.
+- Colors: `#RRGGBB`, `#RGB`, `rgb(r,g,b)`, `ansi256(n)`, `ansi:<name>`
   (`ansi:cyanBright`…).
-- Le nom de fichier (`<slug>.json`) est l'identifiant : `"theme": "custom:<slug>"`.
+- The file name (`<slug>.json`) is the identifier: `"theme": "custom:<slug>"`.
 
-Clés les plus utiles (la liste complète est dans `KNOWN_KEYS` de
-`bin/theme-check.js`) :
+Most useful keys (the full list is in `KNOWN_KEYS` of
+`bin/theme-check.js`):
 
-| Clé | Rôle |
+| Key | Role |
 |---|---|
-| `claude`, `claudeShimmer` | accent de marque, spinner |
-| `text`, `subtle`, `inactive` | texte, texte secondaire, éléments inactifs |
-| `suggestion`, `permission`, `planMode`, `autoAccept` | suggestions, demandes de permission, mode plan, auto-accept |
-| `bashBorder`, `promptBorder` | bordure des commandes Bash, du champ de saisie |
-| `success`, `error`, `warning` | états |
-| `diffAdded`, `diffRemoved` (+ `Dimmed`, `Word`) | fonds de diff : ce sont des **fonds**, choisir des teintes proches du fond du terminal, pas des couleurs vives |
-| `userMessageBackground`, `bashMessageBackgroundColor`, `selectionBg` | fonds des messages, des sorties Bash, de la sélection |
+| `claude`, `claudeShimmer` | brand accent, spinner |
+| `text`, `subtle`, `inactive` | text, secondary text, inactive elements |
+| `suggestion`, `permission`, `planMode`, `autoAccept` | suggestions, permission requests, plan mode, auto-accept |
+| `bashBorder`, `promptBorder` | border of Bash commands, of the input field |
+| `success`, `error`, `warning` | states |
+| `diffAdded`, `diffRemoved` (+ `Dimmed`, `Word`) | diff backgrounds: these are **backgrounds**, pick shades close to the terminal background, not bright colors |
+| `userMessageBackground`, `bashMessageBackgroundColor`, `selectionBg` | backgrounds of messages, Bash output, selection |
 
-## Procédure
+## Procedure
 
-1. Lire le thème existant en entier (`themes/<slug>.json`), ou partir d'un
-   thème voisin pour un nouveau.
-2. Modifier **uniquement** les clés demandées dans `overrides`. Ne jamais
-   inventer une clé : si elle n'est pas dans `KNOWN_KEYS`, elle ne fait rien.
-3. Vérifier :
+1. Read the existing theme in full (`themes/<slug>.json`), or start from a
+   neighboring theme for a new one.
+2. Modify **only** the requested keys in `overrides`. Never
+   invent a key: if it is not in `KNOWN_KEYS`, it does nothing.
+3. Check:
    ```bash
    node ~/.claude-config/bin/theme-check.js ~/.claude-config/themes/<slug>.json
    ```
-   Il signale les clés inconnues, les couleurs mal formées et un contraste
-   texte / fond de message inférieur à 4.5. Corriger toute erreur ; un
-   avertissement de contraste se corrige aussi, sauf demande contraire explicite.
-4. Nouveau thème : `node ~/.claude-config/install.js` pour poser le lien dans
-   `~/.claude/themes/`. Thème existant : rien à faire, le lien pointe déjà sur
-   le fichier du dépôt.
-5. Activer : dire à l'utilisateur de taper `/theme` et de choisir le thème. Ne
-   modifier `theme` dans `~/.claude/settings.json` que s'il le demande, avec une
-   sauvegarde dans `~/.claude/backups/` et un `jq empty` avant d'écrire.
-6. Nouveau thème : l'ajouter au tableau `Contenu` du README, dans le même commit.
+   It reports unknown keys, malformed colors and a text / message background
+   contrast below 4.5. Fix every error; a contrast warning gets fixed too,
+   unless explicitly asked otherwise.
+4. New theme: `node ~/.claude-config/install.js` to create the link in
+   `~/.claude/themes/`. Existing theme: nothing to do, the link already points to
+   the repo file.
+5. Activate: tell the user to type `/theme` and pick the theme. Only
+   modify `theme` in `~/.claude/settings.json` if they ask, with a
+   backup in `~/.claude/backups/` and a `jq empty` before writing.
+6. New theme: add it to the `Contenu` table of the README, in the same commit.
 
-## Barre de statut
+## Status line
 
-La palette est en tête de `bin/statusline.sh` (variables `BLUE`, `MAG`, `CYAN`,
-`GREEN`, `YEL`, `RED`, `GREY`, codes ANSI 256 `\033[38;5;<n>m`). Changer une
-couleur = changer son code, puis vérifier le rendu :
+The palette is at the top of `bin/statusline.sh` (variables `BLUE`, `MAG`, `CYAN`,
+`GREEN`, `YEL`, `RED`, `GREY`, ANSI 256 codes `\033[38;5;<n>m`). Changing a
+color = changing its code, then checking the rendering:
 
 ```bash
 echo '{"workspace":{"current_dir":"/tmp"},"model":{"display_name":"Opus"},"context_window":{"used_percentage":42},"rate_limits":{"five_hour":{"used_percentage":57},"seven_day":{"used_percentage":83}}}' \
   | bash ~/.claude-config/bin/statusline.sh
 ```
 
-## Interdits
+## Forbidden
 
-- Écrire un thème ailleurs que dans `~/.claude-config/themes/`.
-- Annoncer « c'est joli » : ce qui se vérifie ici, c'est la validité et le
-  contraste ; le rendu réel, seul l'utilisateur le voit. Le dire.
-- Toucher aux autres clés de `settings.json` en changeant de thème.
+- Writing a theme anywhere other than `~/.claude-config/themes/`.
+- Announcing « c'est joli »: what can be checked here is validity and
+  contrast; the actual rendering, only the user sees it. Say so.
+- Touching other `settings.json` keys when changing theme.

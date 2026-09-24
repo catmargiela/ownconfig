@@ -1,45 +1,47 @@
 ---
-description: Nettoie le code mort, les dépendances et exports inutilisés, sur une base de tests verte, via l'agent refactor-cleaner.
+description: Cleans up dead code and unused dependencies and exports, on a green test baseline, via the refactor-cleaner agent.
 disable-model-invocation: true
-argument-hint: "[dossier ou vide pour tout le dépôt]"
+argument-hint: "[folder or empty for the whole repository]"
 ---
 
-Nettoie le code mort. Périmètre : `$ARGUMENTS` (vide = tout le dépôt).
+Reply to the user in French.
 
-## 1. Base
+Clean up dead code. Scope: `$ARGUMENTS` (empty = the whole repository).
 
-Détecter les commandes de build et de test (scripts de `package.json`, `go.mod`,
-`pyproject.toml`, `Makefile`), puis les lancer.
+## 1. Baseline
 
-- Rouge : s'arrêter. Montrer l'échec et proposer `/rebenga:build-fix` ou une
-  correction des tests d'abord. Un nettoyage sur une base rouge ne prouve rien.
-- Vert : noter les chiffres exacts (tests passés, durée) comme référence.
+Detect the build and test commands (`package.json` scripts, `go.mod`,
+`pyproject.toml`, `Makefile`), then run them.
 
-Mesurer l'état de départ :
+- Red: stop. Show the failure and suggest `/rebenga:build-fix` or fixing the
+  tests first. A cleanup on a red baseline proves nothing.
+- Green: record the exact figures (tests passed, duration) as the reference.
+
+Measure the starting state:
 
 ```bash
 git diff --stat HEAD            # doit être vide, sinon le signaler
 git ls-files -- $ARGUMENTS | xargs cat | wc -l
 ```
 
-Noter aussi le nombre de dépendances déclarées (manifeste du langage).
+Also record the number of declared dependencies (language manifest).
 
-## 2. Déléguer
+## 2. Delegate
 
-Appeler l'outil Agent avec `subagent_type: rebenga:refactor-cleaner`. Lui
-passer le périmètre, les commandes de build et de test validées à l'étape 1, et
-le chiffre de référence des tests.
+Call the Agent tool with `subagent_type: rebenga:refactor-cleaner`. Pass it
+the scope, the build and test commands validated in step 1, and the
+reference test count.
 
-## 3. Prouver
+## 3. Prove
 
-Relancer **toi-même** build et tests après le retour de l'agent. Comparer :
+Re-run build and tests **yourself** after the agent returns. Compare:
 
 ```bash
 git diff --stat
 git ls-files -- $ARGUMENTS | xargs cat | wc -l
 ```
 
-## Rapport
+## Report
 
 ```
 Avant : 18 420 lignes, 46 dépendances, tests 128/128 ✓
@@ -49,8 +51,8 @@ Conservé volontairement : parseLegacy (référence dynamique)
 API publique touchée : aucune
 ```
 
-Si le nombre de tests a baissé, le signaler explicitement et en donner la
-raison : un test supprimé n'est pas un nettoyage.
+If the number of tests went down, flag it explicitly and give the
+reason: a deleted test is not a cleanup.
 
-Ne pas committer. Proposer la skill `git-ship` si l'utilisateur veut committer,
-avec un commit `refactor:` par catégorie de suppression.
+Do not commit. Suggest the `git-ship` skill if the user wants to commit,
+with one `refactor:` commit per category of removal.

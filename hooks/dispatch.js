@@ -22,17 +22,20 @@ const EVENTS = {
   // le process en sortie 2 avant elle, donc une commande refusée n'est jamais
   // réécrite.
   'pre-bash': ['./lib/secret-guard', './lib/pre-bash', './lib/dev-server-guard', './lib/commit-gate',
-    './lib/bash-hygiene', './lib/compress'],
+    './lib/bash-hygiene', './lib/loop-guard', './lib/compress'],
   'post-edit': ['./lib/post-edit'],
   // La capture vault passe AVANT les gates : ce qui doit être mémorisé l'est,
   // même si un gate interrompt ensuite la fin de réponse.
   'pre-compact': ['./lib/vault#onCompact'],
   // Un seul module interrompt par passage (sortie 2) : le typecheck d'abord, puis
   // les compagnons, puis le contexte. Les suivants reprennent au Stop d'après.
-  'stop': ['./lib/vault#onStop', './lib/stop-quality', './lib/companion-check', './lib/context-monitor'],
+  // delivery-check (avertit) et la notification passent en DERNIER : ils ne
+  // tournent que si aucun gate n'a renvoyé l'agent au travail.
+  'stop': ['./lib/vault#onStop', './lib/stop-quality', './lib/companion-check', './lib/context-monitor',
+    './lib/delivery-check', './lib/turn-timer#onStop'],
   'session-start': ['./lib/vault#onStart'],
   // Chaque message de l'utilisateur : alerte de quota (limites copiées par la status bar).
-  'prompt': ['./lib/quota-alert'],
+  'prompt': ['./lib/quota-alert', './lib/turn-timer#onPrompt'],
 };
 
 /** Nom Claude Code de l'événement, pour le canal d'avertissement JSON. */

@@ -1,45 +1,47 @@
 ---
-description: Explorer le codebase et produire un plan d'implémentation validé avant d'écrire la moindre ligne de code.
+description: Explore the codebase and produce an approved implementation plan before writing a single line of code.
 disable-model-invocation: true
-argument-hint: "<fonctionnalité à planifier>"
+argument-hint: "<feature to plan>"
 ---
 
-Planifier : $ARGUMENTS
+Reply to the user in French.
 
-Suivre ces étapes dans l'ordre. **Aucun code n'est écrit avant l'approbation
-explicite de l'utilisateur.**
+Plan: $ARGUMENTS
 
-## 1. Vérifier la demande
+Follow these steps in order. **No code is written before the user's explicit
+approval.**
 
-Si `$ARGUMENTS` est vide, demander à l'utilisateur ce qu'il veut planifier, puis
-s'arrêter. Ne pas deviner.
+## 1. Check the request
 
-## 2. Déléguer l'exploration
+If `$ARGUMENTS` is empty, ask the user what they want to plan, then
+stop. Do not guess.
 
-Lancer l'outil Agent avec `subagent_type: "rebenga:planner"`. Lui passer :
+## 2. Delegate the exploration
 
-- la demande telle quelle : `$ARGUMENTS` ;
-- le contexte utile déjà connu dans la session — fichiers mentionnés, contraintes
-  énoncées, décisions prises, stack du projet.
+Launch the Agent tool with `subagent_type: "rebenga:planner"`. Pass it:
 
-Attendre son plan. Ne pas refaire l'exploration ici en parallèle.
+- the request as is: `$ARGUMENTS`;
+- the useful context already known in the session — mentioned files, stated
+  constraints, decisions taken, project stack.
 
-## 3. Passer en mode plan
+Wait for its plan. Do not redo the exploration here in parallel.
 
-Appeler l'outil `EnterPlanMode`. S'il n'est pas chargé, le charger d'abord avec
-ToolSearch, requête `select:EnterPlanMode,ExitPlanMode`.
+## 3. Switch to plan mode
 
-En mode plan :
+Call the `EnterPlanMode` tool. If it is not loaded, load it first with
+ToolSearch, query `select:EnterPlanMode,ExitPlanMode`.
 
-- relire le plan du planner, vérifier les chemins cités qui paraissent douteux ;
-- l'affiner : étapes manquantes, vérification absente, risque sous-estimé ;
-- trancher ce qui peut l'être, laisser les vraies questions ouvertes visibles.
+In plan mode:
 
-Présenter le plan final avec `ExitPlanMode` pour approbation.
+- review the planner's plan, check any cited paths that look doubtful;
+- refine it: missing steps, absent verification, underestimated risk;
+- settle what can be settled, keep genuine open questions visible.
 
-## 4. Attendre
+Present the final plan with `ExitPlanMode` for approval.
 
-Tant que l'utilisateur n'a pas approuvé, ne créer ni ne modifier aucun fichier.
-S'il demande des changements, réviser le plan et le représenter. Une fois
-approuvé, suivre les étapes dans l'ordre et exécuter la vérification de chacune
-avant de passer à la suivante.
+## 4. Wait
+
+Until the user has approved, create or modify no file.
+If they ask for changes, revise the plan and present it again. Once
+approved, follow the steps in order and run each one's verification
+before moving to the next.

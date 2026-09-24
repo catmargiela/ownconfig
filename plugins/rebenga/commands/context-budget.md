@@ -1,47 +1,49 @@
 ---
-description: Estime le contexte résident à chaque tour (CLAUDE.md, skills, agents, MCP, plugins) et propose les trois économies les plus rentables.
+description: Estimates the context resident on every turn (CLAUDE.md, skills, agents, MCP, plugins) and proposes the three most cost-effective savings.
 disable-model-invocation: true
-argument-hint: "[vide]"
+argument-hint: "[empty]"
 ---
 
-Estime ce que coûte la configuration Claude Code avant même la première question.
-Chaque token résident se repaie à chaque tour.
+Reply to the user in French.
 
-Estimation : **tokens ≈ caractères / 4**, toujours étiquetée « est. ». Le chiffre
-exact vient de `/context`, pas d'ici.
+Estimate what the Claude Code configuration costs before the very first
+question. Every resident token is paid again on every turn.
 
-## 1. Inventaire
+Estimate: **tokens ≈ characters / 4**, always labelled « est. ». The exact
+figure comes from `/context`, not from here.
 
-Mesurer avec `wc -c`, jamais en affichant le contenu :
+## 1. Inventory
 
-- **CLAUDE.md** : `~/.claude/CLAUDE.md`, `./CLAUDE.md`, `./CLAUDE.local.md`,
-  les CLAUDE.md des dossiers parents jusqu'à la racine du dépôt, et
-  `.claude/rules/**/*.md`. Chargés en entier.
-- **Skills** : seuls `name` + `description` du frontmatter résident. Les
-  extraire de chaque `SKILL.md` de `~/.claude/skills/`, `.claude/skills/` et des
-  plugins activés. Le corps ne coûte rien tant que la skill n'est pas invoquée.
-- **Agents** : idem, `description` seule, dans `~/.claude/agents/`,
-  `.claude/agents/` et les plugins.
-- **Commandes** : la `description` de chaque commande de plugin ou utilisateur.
-- **Plugins activés** :
+Measure with `wc -c`, never by printing the content:
+
+- **CLAUDE.md**: `~/.claude/CLAUDE.md`, `./CLAUDE.md`, `./CLAUDE.local.md`,
+  the CLAUDE.md files of parent folders up to the repository root, and
+  `.claude/rules/**/*.md`. Loaded in full.
+- **Skills**: only the frontmatter `name` + `description` are resident. Extract
+  them from each `SKILL.md` in `~/.claude/skills/`, `.claude/skills/` and the
+  enabled plugins. The body costs nothing until the skill is invoked.
+- **Agents**: same, `description` only, in `~/.claude/agents/`,
+  `.claude/agents/` and the plugins.
+- **Commands**: the `description` of each plugin or user command.
+- **Enabled plugins**:
   `jq -r '.enabledPlugins // {} | to_entries[] | select(.value) | .key' ~/.claude/settings.json`
-  puis leur chemin via
+  then their path via
   `jq -r '.plugins[]?[]?.installPath' ~/.claude/plugins/installed_plugins.json`.
-- **Serveurs MCP** : noms seulement, par
-  `jq -r '.mcpServers // {} | keys[]'` sur `.mcp.json`, `~/.claude.json` et
-  `~/.claude/settings.json`. Les outils différés (chargés via ToolSearch) coûtent
-  ~0 au départ : seul leur nom est listé. Les outils non différés paient leur
-  schéma complet.
+- **MCP servers**: names only, via
+  `jq -r '.mcpServers // {} | keys[]'` on `.mcp.json`, `~/.claude.json` and
+  `~/.claude/settings.json`. Deferred tools (loaded via ToolSearch) cost
+  ~0 up front: only their name is listed. Non-deferred tools pay for their
+  full schema.
 
-## Sécurité
+## Security
 
-Lectures de réglages **par clé** uniquement. Ne jamais afficher `env`, `headers`,
-`args`, `command` d'un serveur MCP ni un fichier de réglages entier : ils
-contiennent des tokens et des clés. Pas de `cat` sur `~/.claude.json`.
+Read settings **by key** only. Never print the `env`, `headers`, `args` or
+`command` of an MCP server, nor an entire settings file: they contain tokens
+and keys. No `cat` on `~/.claude.json`.
 
-## 2. Rapport
+## 2. Report
 
-Un tableau trié par coût décroissant :
+A table sorted by decreasing cost:
 
 ```
 | Composant                  | Nb | Tokens (est.) |
@@ -53,14 +55,14 @@ Un tableau trié par coût décroissant :
 | Total résident             |    | ~4 800        |
 ```
 
-Signaler au passage : description de plus de ~40 mots, CLAUDE.md de plus de
-~200 lignes, skill ou agent dupliquant un autre, serveur MCP qui recouvre une CLI
-déjà disponible (`gh`, `git`).
+Flag along the way: a description over ~40 words, a CLAUDE.md over
+~200 lines, a skill or agent duplicating another, an MCP server that overlaps a
+CLI already available (`gh`, `git`).
 
-## 3. Trois recommandations
+## 3. Three recommendations
 
-Les trois économies au meilleur ratio gain / effort, chacune avec son gain
-estimé et l'action exacte (fichier, plugin ou serveur visé). Ne rien modifier :
-proposer, l'utilisateur tranche.
+The three savings with the best gain / effort ratio, each with its estimated
+gain and the exact action (targeted file, plugin or server). Change nothing:
+propose, the user decides.
 
-Terminer par : « Pour la mesure exacte en direct, lance `/context`. »
+End with: « Pour la mesure exacte en direct, lance `/context`. »

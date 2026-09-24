@@ -1,38 +1,40 @@
 ---
-description: Pose ou fait tourner un secret dans un .env sans que la valeur apparaisse jamais dans la conversation, l'historique shell ou la sortie d'un outil.
+description: Sets or rotates a secret in a .env without the value ever appearing in the conversation, the shell history or a tool's output.
 disable-model-invocation: true
-argument-hint: "<CLE> [fichier .env, vide = .env]"
+argument-hint: "<KEY> [.env file, empty = .env]"
 ---
 
-Poser le secret `$ARGUMENTS`.
+Reply to the user in French.
 
-La valeur ne doit **jamais** passer par la conversation, un argument de
-commande, l'historique shell ou la sortie d'un outil. Tu ne la vois pas, tu ne
-la demandes pas en clair.
+Set the secret `$ARGUMENTS`.
 
-## 1. Valider l'entrée
+The value must **never** go through the conversation, a command argument, the
+shell history or a tool's output. You do not see it, you do not ask for it in
+plain text.
 
-- Clé : premier mot de `$ARGUMENTS`, conforme à `^[A-Z_][A-Z0-9_]*$`. Absente
-  ou invalide : demander et s'arrêter.
-- Fichier : second mot, sinon `.env`. Vérifier qu'il est ignoré par git
-  (`git check-ignore`) ; sinon le signaler avant tout.
-- Si l'utilisateur colle la valeur dans le chat : ne pas l'utiliser sans le
-  prévenir qu'elle est désormais exposée et doit être révoquée puis régénérée.
+## 1. Validate the input
 
-## 2. Choisir la source
+- Key: first word of `$ARGUMENTS`, matching `^[A-Z_][A-Z0-9_]*$`. Missing
+  or invalid: ask and stop.
+- File: second word, else `.env`. Check that git ignores it
+  (`git check-ignore`); otherwise flag it before anything else.
+- If the user pastes the value into the chat: do not use it without warning
+  them that it is now exposed and must be revoked then regenerated.
 
-Demander d'où vient la valeur. La source écrit sur stdout, tu la branches
-directement sur l'écriture, sans jamais l'afficher :
+## 2. Choose the source
 
-- `gh auth token` ;
-- trousseau macOS : `security find-generic-password -s <service> -w` ;
-- saisie : l'utilisateur lance lui-même, dans son terminal, la commande de
-  l'étape 3 précédée de `read -rs VAL && printf '%s\n' "$VAL" |`.
+Ask where the value comes from. The source writes to stdout; you pipe it
+straight into the write, without ever printing it:
 
-## 3. Écrire sans écho
+- `gh auth token`;
+- macOS keychain: `security find-generic-password -s <service> -w`;
+- manual entry: the user runs, in their own terminal, the command from
+  step 3 prefixed with `read -rs VAL && printf '%s\n' "$VAL" |`.
 
-Sauvegarde, puis remplacement de la ligne (ou ajout), doublons retirés, saut de
-ligne garanti, droits 600 :
+## 3. Write without echo
+
+Backup, then replace the line (or append it), duplicates removed, trailing
+newline guaranteed, mode 600:
 
 ```bash
 cp -p "$F" "$F.bak-$(date +%Y%m%d%H%M%S)" && chmod 600 "$F".bak-*
@@ -45,30 +47,30 @@ cp -p "$F" "$F.bak-$(date +%Y%m%d%H%M%S)" && chmod 600 "$F".bak-*
 ' - "$F" > "$F.tmp" ) && chmod 600 "$F.tmp" && mv "$F.tmp" "$F" || rm -f "$F.tmp"
 ```
 
-Valeur vide : rien n'est écrit. Avant de lancer, rapporter l'ancienne ligne
-**masquée** : `KEY=<n caractères>` ou « absente ».
+Empty value: nothing is written. Before running, report the old line
+**masked**: `KEY=<n caractères>` or « absente ».
 
-## 4. Vérifier, sans la valeur
+## 4. Verify, without the value
 
 ```bash
 awk -v k="$KEY" 'index($0, k "=") == 1 { n++; printf "ligne %d : %d caractères\n", NR, length($0) - length(k) - 1 } END { print n + 0 " occurrence(s)" }' "$F"
 awk 'NF && $0 !~ /^[[:space:]]*#/ && index($0, "=") == 0 { print "ligne " NR " sans =" }' "$F"
 ```
 
-Attendu : une occurrence, la longueur prévue, aucune ligne sans `=`, droits
-600 (`stat -f %Lp` sur macOS, `stat -c %a` sur Linux). Si le service permet
-d'éprouver le secret sans le passer en argument, le faire.
+Expected: one occurrence, the expected length, no line without `=`, mode
+600 (`stat -f %Lp` on macOS, `stat -c %a` on Linux). If the service lets you
+test the secret without passing it as an argument, do so.
 
-## .env distant
+## Remote .env
 
-Même procédure par ssh : la valeur voyage **sur stdin**, jamais dans la ligne
-de commande (visible dans `ps` et l'historique distant). Un tube et un heredoc
-ne peuvent pas alimenter stdin à la fois : passer le script en argument, la
-valeur par le tube — `<source> | ssh <hôte> '<script awk ci-dessus>'`.
-Confirmer l'hôte avant d'écrire.
+Same procedure over ssh: the value travels **on stdin**, never on the command
+line (visible in `ps` and the remote history). A pipe and a heredoc cannot
+both feed stdin: pass the script as an argument, the value through the pipe —
+`<source> | ssh <hôte> '<script awk ci-dessus>'`.
+Confirm the host before writing.
 
-## Interdits
+## Forbidden
 
-`cat`, `grep` ou `source` du fichier, `echo "$VAL"`, `set -x`, `>>` à l'aveugle.
-Après écriture, `docker compose restart` ne relit pas l'`env_file` : il faut
-`docker compose up -d <service>`, et seulement avec l'accord de l'utilisateur.
+`cat`, `grep` or `source` of the file, `echo "$VAL"`, `set -x`, blind `>>`.
+After writing, `docker compose restart` does not re-read the `env_file`: you
+need `docker compose up -d <service>`, and only with the user's consent.

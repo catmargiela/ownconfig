@@ -1,10 +1,14 @@
-# Modèles de règles par projet
+# Per-project rule templates
 
-À copier dans `<projet>/.claude/rules/`, jamais dans `~/.claude/`.
+Copy into `<project>/.claude/rules/`, never into `~/.claude/`.
 
-Une règle globale est chargée à **chaque** session, sur tous les projets. Une
-règle Solidity en global se paie sur chaque site vitrine. Le critère est simple :
-si la règle ne s'applique pas à tous les projets, elle est locale.
+A global rule is loaded in **every** session, on every project. A Solidity
+rule kept global is paid for on every brochure site. The test is simple: if
+the rule does not apply to every project, it is local.
 
-La skill `project-onboarding` génère le `CLAUDE.md` d'un projet ; ces modèles
-complètent quand le projet impose un langage absent de la configuration globale.
+The `project-onboarding` skill generates a project's `CLAUDE.md`; these
+templates fill the gap when the project uses a language absent from the global
+config.
+
+- `adr.md` — Architecture Decision Record template (French). Not a rule: copy
+  it to `<project>/docs/adr/NNNN-slug.md` for a structural decision.

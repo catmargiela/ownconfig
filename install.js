@@ -157,13 +157,25 @@ function fileLinks() {
   return targets;
 }
 
+/**
+ * Règles globales `rules/global/*.md`, liées une par une dans `~/.claude/rules/`.
+ * Chacune porte un frontmatter `paths:` : elle ne se charge que si des fichiers
+ * correspondants sont en jeu (Go, TypeScript…), jamais à chaque session.
+ */
+function ruleLinks() {
+  let names = [];
+  try { names = fs.readdirSync(path.join(SRC, 'rules', 'global')).filter((f) => f.endsWith('.md')); }
+  catch { /* pas de dossier rules/global/ */ }
+  return names.map((n) => [path.join(SRC, 'rules', 'global', n), path.join(CLAUDE, 'rules', n)]);
+}
+
 /** Tout ce que l'installeur lie, en [source, destination] : ce que config-doctor vérifie. */
 function expectedLinks() {
-  return [...fileLinks(), ...SCRIPTS.map(([n, d]) => [path.join(SRC, 'bin', n), d]), ...themeLinks()];
+  return [...fileLinks(), ...SCRIPTS.map(([n, d]) => [path.join(SRC, 'bin', n), d]), ...themeLinks(), ...ruleLinks()];
 }
 
 function installFiles() {
-  const targets = fileLinks();
+  const targets = [...fileLinks(), ...ruleLinks()];
   const themes = themeLinks();
   if (UNINSTALL) {
     targets.forEach(([, d]) => unlink(d));

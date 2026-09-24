@@ -1,74 +1,75 @@
 ---
 name: e2e-testing
-description: Patterns de tests end-to-end d'application web avec Playwright — localisateurs, fixtures, auth réutilisée, anti-instabilité, CI. À utiliser quand on parle de tests end-to-end, de parcours utilisateur à tester, de Playwright ou de test instable.
+description: End-to-end testing patterns for web apps with Playwright — locators, fixtures, reused auth, flakiness, CI. Use when the talk is about end-to-end tests, user journeys to test, Playwright or a flaky test.
 ---
 
-# Tests end-to-end
+# End-to-end tests
 
-Un test e2e coûte cher à écrire, à lancer et à maintenir. Il se justifie quand
-il protège un parcours dont la panne coûte de l'argent ou des utilisateurs.
+Reply to the user in French.
 
-## Quand l'écrire
+An e2e test is expensive to write, run and maintain. It is justified when it
+protects a journey whose failure costs money or users.
 
-- **Oui** : inscription, connexion, paiement, parcours principal du produit,
-  intégration entre front, API et base qu'aucun autre test ne couvre.
-- **Non** : logique métier, cas limites de validation, formatage. Un test
-  unitaire les couvre plus vite et plus précisément.
+## When to write one
 
-Viser quelques parcours solides, pas une copie e2e de la suite unitaire.
+- **Yes**: sign-up, login, payment, the product's main journey, integration
+  between front end, API and database that no other test covers.
+- **No**: business logic, validation edge cases, formatting. A unit test covers
+  them faster and more precisely.
 
-## Localisateurs
+Aim for a few solid journeys, not an e2e copy of the unit suite.
 
-Par ordre de préférence : `getByRole('button', { name: 'Payer' })`,
-`getByLabel('E-mail')`, `getByText`, puis `getByTestId`. Ils suivent ce que
-l'utilisateur voit et échouent quand l'accessibilité casse. Jamais de sélecteur
-fondé sur une classe CSS ou la position dans le DOM.
+## Locators
 
-## Fixtures et données
+In order of preference: `getByRole('button', { name: 'Payer' })`,
+`getByLabel('E-mail')`, `getByText`, then `getByTestId`. They follow what the
+user sees and fail when accessibility breaks. Never a selector based on a CSS
+class or a position in the DOM.
 
-- `test.extend` pour fournir une page déjà dans le bon état ou un utilisateur
-  de test créé par API.
-- Chaque test crée ses propres données, avec un identifiant unique, et ne
-  dépend d'aucun autre test.
-- Préparer l'état par API plutôt que par clics : plus rapide, moins fragile.
+## Fixtures and data
 
-## Authentification
+- `test.extend` to provide a page already in the right state or a test user
+  created through the API.
+- Each test creates its own data, with a unique identifier, and depends on no
+  other test.
+- Set up state through the API rather than clicks: faster, less brittle.
 
-Un projet `setup` se connecte une fois et écrit `storageState` dans un fichier
-ignoré par git. Les autres projets le déclarent dans `use.storageState` et
-dépendent du setup via `dependencies`. Identifiants par variables
-d'environnement, jamais en dur.
+## Authentication
 
-## Attentes
+A `setup` project logs in once and writes `storageState` to a git-ignored
+file. The other projects declare it in `use.storageState` and depend on setup
+through `dependencies`. Credentials from environment variables, never
+hardcoded.
 
-- Assertions web-first : `await expect(locator).toHaveText(...)` attend seule.
-- Pour un appel précis : `const res = page.waitForResponse('**/api/cart')`
-  avant l'action, puis `await res` après.
-- Interdit : `page.waitForTimeout(ms)`. Un délai fixe est soit trop long, soit
-  trop court sur la CI.
+## Waiting
 
-## Anti-instabilité
+- Web-first assertions: `await expect(locator).toHaveText(...)` waits on its own.
+- For a specific call: `const res = page.waitForResponse('**/api/cart')`
+  before the action, then `await res` after.
+- Forbidden: `page.waitForTimeout(ms)`. A fixed delay is either too long or
+  too short on CI.
 
-Un test instable est un bug, dans le test ou dans l'application. Le reproduire
-avec `npx playwright test --repeat-each=10 fichier.spec.ts`, lire la trace, et
-corriger la cause : attente manquante, données partagées, animation, horloge.
-Ne pas monter `retries` ni marquer `skip` pour le faire taire.
+## Flakiness
 
-## Lancer
+A flaky test is a bug, in the test or in the app. Reproduce it with
+`npx playwright test --repeat-each=10 fichier.spec.ts`, read the trace, and
+fix the cause: missing wait, shared data, animation, clock. Do not raise
+`retries` or mark it `skip` to silence it.
+
+## Running
 
 ```bash
-npx playwright test                     # headless, tous les navigateurs configurés
+npx playwright test                     # headless, all configured browsers
 npx playwright test e2e/checkout.spec.ts --project=chromium
-npx playwright test --trace on          # trace complète pour déboguer
+npx playwright test --trace on          # full trace for debugging
 npx playwright show-report
 ```
 
-En CI : `npx playwright install --with-deps chromium`, `webServer` dans la
-config pour démarrer l'application, `forbidOnly: !!process.env.CI`, et
-`test-results/` publié en artefact en cas d'échec.
+On CI: `npx playwright install --with-deps chromium`, `webServer` in the
+config to start the app, `forbidOnly: !!process.env.CI`, and `test-results/`
+published as an artifact on failure.
 
-## Déléguer
+## Delegating
 
-Pour écrire, lancer et déboguer les tests, utiliser l'agent
-`rebenga:e2e-runner`. Lui donner le parcours à couvrir, l'URL de base et la
-commande de démarrage de l'application.
+To write, run and debug the tests, use the `rebenga:e2e-runner` agent. Give it
+the journey to cover, the base URL and the app's start command.

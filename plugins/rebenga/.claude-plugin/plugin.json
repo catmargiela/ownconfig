@@ -1,7 +1,7 @@
 {
   "name": "rebenga",
   "description": "Commandes, agents et skills de travail : plan, TDD, build, refactor, revues Go/Python/TS/SQL/Rust-Tauri, erreurs avalées, couverture de tests, double revue, migrations, déploiement, canary, secrets, e2e, issues, contrats d'API, dépôts miroirs, garde-fous sur mesure, budget de contexte, bilan de la compression des sorties, diagnostic de la config.",
-  "version": "0.4.4",
+  "version": "0.5.0",
   "author": {
     "name": "catmargiela"
   }

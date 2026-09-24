@@ -1,27 +1,29 @@
 ---
-description: Revue Python du diff courant ou des chemins donnés, déléguée à l'agent python-reviewer.
-argument-hint: [chemins ou vide pour le diff courant]
+description: Python review of the current diff or of the given paths, delegated to the python-reviewer agent.
+argument-hint: [paths or empty for the current diff]
 ---
 
-Revue Python demandée. Arguments : `$ARGUMENTS`
+Reply to the user in French.
 
-## Procédure
+Python review requested. Arguments: `$ARGUMENTS`
 
-1. Périmètre :
-   - si des arguments sont fournis, ce sont les fichiers ou dossiers à relire ;
-   - sinon, `git diff HEAD --name-only -- '*.py'`, puis `HEAD~1` si c'est vide.
-   Aucun fichier Python : le dire à l'utilisateur et s'arrêter.
-2. Déléguer la revue avec l'outil Agent, `subagent_type: "rebenga:python-reviewer"`.
-   Lui passer la liste des fichiers et, s'il existe, l'objectif du changement
-   en une phrase. Ne pas relire toi-même les fichiers : l'agent s'en charge.
-3. Relayer son rapport tel quel ou presque : sortie de l'outillage, findings
-   avec sévérité et fichier:ligne, verdict. Ne pas adoucir ni retirer un
-   finding, ne pas en ajouter.
-4. S'il y a des findings CRITIQUE ou ÉLEVÉ, proposer de les corriger, sans
-   commencer avant l'accord de l'utilisateur.
+## Procedure
 
-## Interdits
+1. Scope:
+   - if arguments are given, they are the files or folders to review;
+   - otherwise, `git diff HEAD --name-only -- '*.py'`, then `HEAD~1` if that is empty.
+   No Python file: tell the user and stop.
+2. Delegate the review with the Agent tool, `subagent_type: "rebenga:python-reviewer"`.
+   Pass it the list of files and, if there is one, the goal of the change
+   in one sentence. Do not review the files yourself: the agent handles it.
+3. Relay its report as is or nearly: tooling output, findings
+   with severity and file:line, verdict. Do not soften or drop a
+   finding, do not add any.
+4. If there are CRITIQUE or ÉLEVÉ findings, offer to fix them, without
+   starting before the user's consent.
 
-- Annoncer que le code est sain si l'agent a signalé un outil en échec ou
-  non lancé : le dire explicitement.
-- Corriger en ajoutant `# noqa`, `# type: ignore` ou en sautant un test.
+## Forbidden
+
+- Announcing the code is sound if the agent reported a tool that failed or
+  was not run: say so explicitly.
+- Fixing by adding `# noqa`, `# type: ignore` or by skipping a test.

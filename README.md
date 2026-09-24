@@ -24,6 +24,9 @@ conservés. `settings.json` est sauvegardé à chaque passage dans
 `~/.claude/backups/settings.json.ccx-<horodatage>` ; seules les 3 sauvegardes les
 plus récentes sont gardées, les autres fichiers du dossier ne sont jamais touchés.
 
+Les agents, skills et commandes sont rédigés en anglais ; tout ce qu'ils affichent
+(rapports, tableaux, commentaires postés) reste en français.
+
 Il lie aussi les scripts de `bin/` à l'endroit où Claude Code les attend :
 `~/.claude/statusline.sh`, `~/.claude/bin/gh-mcp-headers.sh` et
 `~/.claude/bin/config-doctor.js` (rendus exécutables). Chaque `themes/*.json` est lié de la même façon dans
@@ -36,7 +39,7 @@ retire ces liens comme les autres.
 | | |
 |---|---|
 | `CLAUDE.md` | règles chargées à chaque session — 63 lignes, chacune doit se justifier |
-| `agents/` | 5 sous-agents : relecture, sécurité, build, front, tests |
+| `agents/` | 5 sous-agents : relecture, sécurité (dont Next.js : Server Actions, `NEXT_PUBLIC_*`, schémas d'URL, en-têtes), build (TS, Go, Rust/Tauri), front (dont checklist WCAG 2.2), tests |
 | `skills/` | 5 workflows déclenchés par leur description : `git-ship`, `verification-loop`, `vault-note`, `project-onboarding`, `theme-edit` |
 | `hooks/` | dispatcher + contrôles + pont Obsidian + moniteur de contexte + rappel des fichiers compagnons + compression des sorties Bash (`hooks/lib/compress/`) |
 | `vendor/token-saver/` | moteur de compression [token-saver](https://github.com/ppgranger/token-saver) (Apache-2.0), `src/` non modifié, appelé par `hooks/lib/compress/ts_adapter.py` ; jamais installé, n'enregistre aucun hook (`NOTICE`) |
@@ -49,7 +52,9 @@ retire ces liens comme les autres.
 | `bin/theme-check.js` | vérifie un thème : forme, clés connues, syntaxe des couleurs, contraste texte / fond ≥ 4.5 (utilisé par la skill `theme-edit`) |
 | `bin/check-plugin.sh` | contrôle structurel de la marketplace, du plugin et des frontmatters, sans la CLI `claude` (utilisé par la CI) |
 | `.github/workflows/ci.yml` | CI GitHub : `node test.js` (Node, Go et Python 3.12), thèmes et manifestes à chaque PR et à chaque push sur `main` |
-| `rules/templates/` | modèles de règles **par projet** (jamais installés en global) |
+| `rules/global/` | règles Go et TypeScript liées dans `~/.claude/rules/` ; frontmatter `paths:` : chargées seulement quand des fichiers `.go` / `.ts(x)` sont en jeu, 0 token sinon |
+| `rules/templates/` | modèles de règles **par projet** (jamais installés en global) et gabarit d'ADR (`adr.md`) pour les dépôts clients |
+| `NOTICE` | provenance du code tiers (token-saver, Apache-2.0) et des éléments réécrits à partir d'une autre config sous MIT |
 
 Pas de dossier `commands/` à la racine : une skill se déclenche seule, une
 commande exige d'être tapée. Les commandes qui méritent d'exister vivent dans le
@@ -86,12 +91,12 @@ qu'un process par contrôle enregistré.
 | Événement | Contrôle |
 |---|---|
 | `PreToolUse` Edit/Write | refuse un secret écrit en clair (`secret-guard`) ; refuse une migration goose avec `;` en commentaire ou sans `Down`, avertit sur `DROP` sans `IF EXISTS` et AND/OR non parenthésés (`migration-guard`) ; refuse d'éditer une config de lint/format/types ; fact-forcing (strict) |
-| `PreToolUse` Bash | refuse un secret écrit dans un fichier ; refus durs ; fact-forcing sur commande destructive ; refuse un serveur ou un watcher au premier plan (`next dev`, `npm run dev`, `vite`, `go run`, `air`, `tauri dev`, `docker compose up` sans `-d`, `nodemon`, `--watch`) sans `run_in_background` (`dev-server-guard`) ; sur `git commit`, refuse un `console.log`/`debugger` ajouté hors tests, un `.go` indexé non gofmt, un message `-m` hors conventional commits, et avertit sur un TODO/FIXME ajouté — contenu indexé seulement, ~30 ms (`commit-gate`) ; avertissements d'hygiène : glob zsh sans correspondance, guillemets imbriqués dans `ssh`, statut lu après un pipe sans `pipefail`, `sleep` long (`bash-hygiene`) ; en dernier, réécrit une commande de lecture ou de build éligible pour compresser sa sortie (`compress`, voir plus bas) |
+| `PreToolUse` Bash | refuse un secret écrit dans un fichier ; refus durs, dont tout contournement des hooks git : `--no-verify` (et ses abréviations `--no-v`…) sur commit, push, merge, rebase, pull, am, cherry-pick, revert, `HUSKY=0` juste devant `git` ou exporté, `core.hooksPath` en `-c`, en `git config` ou via `GIT_CONFIG_PARAMETERS` / `GIT_CONFIG_COUNT` ; fact-forcing sur commande destructive ; refuse un serveur ou un watcher au premier plan (`next dev`, `npm run dev`, `vite`, `go run`, `air`, `tauri dev`, `docker compose up` sans `-d`, `nodemon`, `--watch`) sans `run_in_background` (`dev-server-guard`) ; sur `git commit`, refuse un `console.log`/`debugger` ajouté hors tests, un `.go` indexé non gofmt, un message `-m` hors conventional commits, et avertit sur un TODO/FIXME ajouté — contenu indexé seulement, ~30 ms (`commit-gate`) ; avertissements d'hygiène : glob zsh sans correspondance, guillemets imbriqués dans `ssh`, statut lu après un pipe sans `pipefail`, `sleep` long (`bash-hygiene`) ; même commande lancée 4 fois d'affilée → avertissement de boucle, jamais bloquant (`loop-guard`, `CCX_LOOP_GUARD=off`) ; en dernier, réécrit une commande de lecture ou de build éligible pour compresser sa sortie (`compress`, voir plus bas) |
 | `PostToolUse` Edit/Write | empile les fichiers touchés : lot de la réponse + liste de la session (aucun travail lourd ici) |
 | `PreCompact` | écrit l'état de la session dans le vault Obsidian |
-| `Stop` | capture vault, puis format + typecheck + `console.log` en un lot, puis rappel des fichiers compagnons (`companion-check`), puis mesure du contexte |
+| `Stop` | capture vault, puis format (Biome/Prettier, `gofmt -w`, `rustfmt`) + typecheck + `go vet` des paquets touchés (sans réseau : `GOPROXY=off`) + `console.log` en un lot, puis rappel des fichiers compagnons (`companion-check`), puis mesure du contexte ; si rien n'a renvoyé l'agent au travail : avertissement quand la réponse invoque un « bug préexistant », des tests sautés, « hors périmètre » ou « devrait marcher » (`delivery-check`, `CCX_DELIVERY_CHECK=off`), puis notification macOS si le tour a duré ≥ 90 s (`turn-timer`, `CCX_NOTIFY_AFTER`, `CCX_NOTIFY=off`) |
 | `SessionStart` | réinjecte le profil et le contexte projet depuis le vault |
-| `UserPromptSubmit` | alerte de quota (`quota-alert`) : quand la fenêtre 5 h ou 7 j franchit 80 % puis 95 %, un message pour toi et la même note pour le modèle (étapes courtes, pas de sous-agents sans accord), une fois par seuil, par fenêtre et par session. Les limites viennent de la barre de statut (les hooks ne les reçoivent pas) ; une fenêtre déjà réinitialisée est ignorée. Seuils : `CCX_QUOTA_WARN=80,95` ; `CCX_QUOTA_ALERT=off` pour couper |
+| `UserPromptSubmit` | note l'heure de début du tour (pour la notification) ; alerte de quota (`quota-alert`) : quand la fenêtre 5 h ou 7 j franchit 80 % puis 95 %, un message pour toi et la même note pour le modèle (étapes courtes, pas de sous-agents sans accord), une fois par seuil, par fenêtre et par session. Les limites viennent de la barre de statut (les hooks ne les reçoivent pas) ; une fenêtre déjà réinitialisée est ignorée. Seuils : `CCX_QUOTA_WARN=80,95` ; `CCX_QUOTA_ALERT=off` pour couper |
 
 Deux invariants :
 
@@ -524,11 +529,16 @@ répétées dans les sessions passées, pour `hookify`).
 | `tdd-workflow` | boucle rouge → vert → refactor, preuve à chaque étape |
 | `e2e-testing` | patterns Playwright, anti-instabilité |
 | `prod-e2e` | suite Playwright versionnée contre la prod, comptes `e2e-*` jetables |
-| `issue-batch` | lot d'issues GitHub : implémentation, revue, fermeture, passage à Done dans Projects |
+| `issue-batch` | lot d'issues GitHub : implémentation, revue, fermeture, passage à Done dans Projects ; le contenu des issues, PR et logs CI est traité comme donnée, jamais comme instruction ; condition de fin vérifiable par issue, 2 essais puis escalade, état relu sur GitHub |
 | `mirror-sync` | un module dupliqué entre deux dépôts : divergences, patch appliqué des deux côtés |
 | `tauri-release` | release Tauri v2 via tauri-action : versions, signature, `latest.json`, runners |
 | `contract-first` | un contrat d'API, un fournisseur (Go/sqlc), plusieurs clients (Next, Tauri) : changements cassants repérés, tous les côtés mis à jour ensemble |
 | `iterative-retrieval` | délégation par tours : l'agent dit ce qui lui manque au lieu de tout recevoir d'avance (2-3 tours max) |
+| `golang-testing` | tests Go : table-driven, `httptest`, vrai Postgres plutôt que des mocks sqlc, fuzz, `-race` |
+| `postgres-patterns` | index, `EXPLAIN`, pagination par clé, verrous, migrations sans interruption (expand/contract, `CONCURRENTLY`, `NOT VALID`) |
+| `api-design` | enveloppe d'erreur unique, codes HTTP, pagination par curseur, idempotence, versioning additif, dates et montants |
+| `click-path-audit` | pour un écran ou un bouton : chemin d'appel de chaque handler, carte des états modifiés/remis à zéro, actions qui s'annulent, doubles envois |
+| `production-audit` | avant une livraison client : SHIP / SHIP AVEC RÉSERVES / BLOQUER sur preuves locales (auth, migrations, secrets, rollback, tests, updater Tauri) |
 
 Tout ce qui est propre à un projet (services attendus, URL de santé, paire de
 dépôts miroirs) est lu dans le projet lui-même — son `CLAUDE.md` ou ses scripts —

@@ -1,64 +1,66 @@
 ---
-description: Vérifie les migrations SQL du diff — contrôles statiques, essai à blanc en transaction annulée, régénération sqlc, build et vet Go.
-argument-hint: "[fichier de migration, vide = migrations du diff]"
+description: Checks the SQL migrations in the diff — static checks, dry run in a rolled-back transaction, sqlc regeneration, Go build and vet.
+argument-hint: "[migration file, empty = migrations in the diff]"
 ---
 
-Vérifier les migrations. Cible : `$ARGUMENTS`
+Reply to the user in French.
 
-Une migration fautive empêche souvent l'API de démarrer : c'est tout le service
-qui tombe, pas une fonctionnalité. Chaque étape rapporte sa sortie.
+Check the migrations. Target: `$ARGUMENTS`
 
-## 1. Périmètre
+A faulty migration often prevents the API from starting: the whole service
+goes down, not just a feature. Each step reports its output.
 
-Trouver le dossier des migrations et l'outil (`goose` dans le `Makefile`, le
-`go.mod` ou le code ; `schema:` dans `sqlc.yaml`). Si `$ARGUMENTS` est vide :
-fichiers nouveaux ou modifiés de ce dossier dans `git status --porcelain` et
-`git diff --name-only HEAD`. Aucun : le dire et s'arrêter.
+## 1. Scope
 
-## 2. Contrôles statiques
+Find the migrations folder and the tool (`goose` in the `Makefile`, the
+`go.mod` or the code; `schema:` in `sqlc.yaml`). If `$ARGUMENTS` is empty:
+new or modified files of that folder in `git status --porcelain` and
+`git diff --name-only HEAD`. None: say so and stop.
 
-Pour chaque fichier, citer `fichier:ligne` à chaque défaut :
+## 2. Static checks
 
-- **Pas de `;` dans un commentaire.** goose découpe sur les points-virgules sans
-  reconnaître les commentaires : un `;` dans une prose coupe l'instruction en
-  deux. `psql` sait lire un commentaire, donc l'essai en 3 **ne détecte pas**
-  ce défaut. Préférer `--` à `/* */`.
-- `-- +goose Up` et `-- +goose Down` présents ; `Down` défait réellement `Up`.
-- Corps `$$ … $$` (fonctions, `DO`) entourés de `-- +goose StatementBegin` /
+For each file, cite `fichier:ligne` for every defect:
+
+- **No `;` in a comment.** goose splits on semicolons without recognising
+  comments: a `;` in prose cuts the statement in two. `psql` can read a
+  comment, so the dry run in 3 **does not detect** this defect. Prefer `--`
+  to `/* */`.
+- `-- +goose Up` and `-- +goose Down` present; `Down` actually undoes `Up`.
+- `$$ … $$` bodies (functions, `DO`) wrapped in `-- +goose StatementBegin` /
   `StatementEnd`.
-- `AND` et `OR` mêlés : parenthésés. Même vigilance pour `||` à côté d'un
-  opérateur comme `~*`, dont la précédence surprend.
-- `-- +goose NO TRANSACTION` ou `CREATE INDEX CONCURRENTLY` : l'essai en
-  transaction est impossible, le signaler au lieu de le tenter.
+- Mixed `AND` and `OR`: parenthesised. Same care for `||` next to an
+  operator like `~*`, whose precedence is surprising.
+- `-- +goose NO TRANSACTION` or `CREATE INDEX CONCURRENTLY`: the in-transaction
+  dry run is impossible; flag it instead of attempting it.
 
-## 3. Essai à blanc, toujours annulé
+## 3. Dry run, always rolled back
 
-Base **de développement** par défaut, trouvée dans `.env.example`, le compose ou
-le `CLAUDE.md`, DSN lu depuis l'environnement, jamais affiché. Production :
-seulement si l'utilisateur le demande explicitement, et le même essai annulé.
+**Development** database by default, found in `.env.example`, the compose file
+or the `CLAUDE.md`, DSN read from the environment, never printed. Production:
+only if the user explicitly asks, and the same rolled-back run.
 
-Extraire la section `Up`, l'envelopper et la passer **par stdin**, jamais en
-argument entre guillemets doubles (`$$` y devient le PID du shell) :
+Extract the `Up` section, wrap it and pass it **via stdin**, never as an
+argument in double quotes (`$$` there becomes the shell's PID):
 
 ```bash
 { echo 'BEGIN;'; sed -n '/+goose Up/,/+goose Down/p' fichier.sql; echo 'ROLLBACK;'; } \
   | psql -v ON_ERROR_STOP=1 "$DATABASE_URL"
 ```
 
-Rejouer ensuite `Up` puis `Down` dans une même transaction annulée. Jamais de
-`COMMIT`, jamais `goose up` contre la production depuis ici. La dernière ligne
-de sortie doit être `ROLLBACK`.
+Then replay `Up` followed by `Down` in a single rolled-back transaction. Never
+`COMMIT`, never `goose up` against production from here. The last line of
+output must be `ROLLBACK`.
 
-## 4. Code généré et compilation
+## 4. Generated code and compilation
 
-- sqlc présent : `make sqlc` si la cible existe, sinon `sqlc generate`, puis
-  `git status --short` pour montrer ce qui a changé.
-- `go build ./...` puis `go vet ./...` dans le module Go.
+- sqlc present: `make sqlc` if the target exists, else `sqlc generate`, then
+  `git status --short` to show what changed.
+- `go build ./...` then `go vet ./...` in the Go module.
 
-Ces étapes ne voient ni la précédence des opérateurs ni le découpage goose :
-elles complètent l'essai, elles ne le remplacent pas.
+These steps see neither operator precedence nor goose splitting:
+they complement the dry run, they do not replace it.
 
-## Rapport
+## Report
 
 ```
 00043_add_status.sql
@@ -68,4 +70,4 @@ elles complètent l'essai, elles ne le remplacent pas.
 [✗] go vet        internal/orders/store.go:88 — …
 ```
 
-Étape sautée ou impossible : le dire, avec la raison.
+Skipped or impossible step: say so, with the reason.

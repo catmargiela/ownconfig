@@ -1,55 +1,56 @@
 ---
 name: tdd-workflow
-description: Boucle test-first ROUGE, VERT, REFACTOR avec preuve à chaque étape. À utiliser quand on doit écrire le code avec les tests d'abord, pour une nouvelle fonctionnalité ou un correctif de bug en test-first.
+description: Test-first RED, GREEN, REFACTOR loop with proof at every step. Use when the code must be written tests first, for a new feature or a bug fix done test-first.
 ---
 
-# Workflow TDD
+# TDD workflow
 
-Le test d'abord n'a de valeur que si chaque étape est prouvée par la sortie du
-runner. « Le test échoue » sans sortie collée est une affirmation, pas une preuve.
+Reply to the user in French.
 
-## Boucle
+Test-first is only worth anything if every step is proven by the runner's
+output. "The test fails" without pasted output is a claim, not a proof.
 
-1. **ROUGE** — un test pour un comportement. Lancer. Montrer l'échec, et vérifier
-   qu'il échoue sur l'assertion — pas sur un import cassé ou une faute de frappe.
-2. **VERT** — le code minimal qui le fait passer. Lancer. Montrer le succès.
-3. **REFACTOR** — nettoyer code et test. Relancer la suite concernée. Montrer
-   qu'elle reste verte.
+## Loop
 
-Un comportement par tour. Lancer le fichier de test ciblé pendant la boucle, la
-suite complète à la fin.
+1. **RED** — one test for one behavior. Run it. Show the failure, and check
+   that it fails on the assertion — not on a broken import or a typo.
+2. **GREEN** — the minimal code that makes it pass. Run it. Show the success.
+3. **REFACTOR** — clean up code and test. Rerun the relevant suite. Show that
+   it stays green.
 
-## Choisir le premier test
+One behavior per round. Run the targeted test file during the loop, the full
+suite at the end.
 
-- **Bug** : le test qui reproduit exactement le défaut signalé. S'il passe, le bug
-  n'est pas compris — enquêter avant de corriger.
-- **Feature** : le cas nominal le plus simple qui force l'existence de l'API
-  publique (signature, nom, type de retour). Puis les frontières : entrée vide,
-  `null`, valeur limite, erreur réseau.
-- Tester le comportement observable par l'appelant, jamais l'implémentation.
+## Choosing the first test
 
-## Déléguer
+- **Bug**: the test that reproduces exactly the reported defect. If it passes,
+  the bug is not understood — investigate before fixing.
+- **Feature**: the simplest nominal case that forces the public API into
+  existence (signature, name, return type). Then the boundaries: empty input,
+  `null`, limit value, network error.
+- Test the behavior observable by the caller, never the implementation.
 
-Lancer l'agent `rebenga:tdd-guide` quand l'implémentation demande plusieurs tours
-de boucle ou touche plusieurs fichiers : il exécute la boucle entière et rend les
-preuves ROUGE/VERT par comportement. Pour un changement d'un seul test, dérouler
-la boucle ici.
+## Delegating
 
-Cette skill complète l'agent `test-writer` existant, elle ne le remplace pas :
-`test-writer` écrit les tests d'une feature ou reproduit un bug avant correction ;
-`tdd-guide` enchaîne test et implémentation jusqu'au vert. Pour un bug, on peut
-faire écrire la reproduction par `test-writer`, puis dérouler VERT et REFACTOR.
+Launch the `rebenga:tdd-guide` agent when the implementation needs several
+rounds of the loop or touches several files: it runs the whole loop and returns
+the RED/GREEN proofs per behavior. For a single-test change, run the loop here.
 
-## Interdits
+This skill complements the existing `test-writer` agent, it does not replace
+it: `test-writer` writes a feature's tests or reproduces a bug before the fix;
+`tdd-guide` chains test and implementation until green. For a bug, you can have
+`test-writer` write the reproduction, then run GREEN and REFACTOR.
 
-Affaiblir une assertion, `skip` ou `only`, toucher la config du runner, mocker
-l'unité sous test, un test réduit à un snapshot. Un rouge se corrige dans le code.
+## Forbidden
+
+Weakening an assertion, `skip` or `only`, touching the runner config, mocking
+the unit under test, a test reduced to a snapshot. A red is fixed in the code.
 
 ## Checklist
 
-- [ ] Runner et conventions du projet repérés avant d'écrire
-- [ ] Chaque test vu en échec, sortie montrée
-- [ ] Chaque test vu en succès, sortie montrée
-- [ ] Suite complète relancée après refactor, chiffres réels rapportés
-- [ ] Aucun test affaibli, ignoré ni supprimé
-- [ ] Tests ignorés ou non couverts signalés explicitement
+- [ ] Project runner and conventions identified before writing
+- [ ] Every test seen failing, output shown
+- [ ] Every test seen passing, output shown
+- [ ] Full suite rerun after refactor, actual numbers reported
+- [ ] No test weakened, skipped or deleted
+- [ ] Skipped or uncovered tests explicitly flagged

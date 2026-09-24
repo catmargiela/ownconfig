@@ -1,0 +1,12 @@
+Third-party material in this repository
+
+vendor/token-saver/
+  token-saver, Apache License 2.0 — see vendor/token-saver/NOTICE and LICENSE.
+
+Hooks, rules, agents and skills listed below were rewritten from ideas in
+"Everything Claude Code" (https://github.com/affaan-m/ECC), MIT License,
+Copyright (c) 2026 Affaan Mustafa. No file was copied verbatim.
+  hooks/lib/stop-lang.js, hooks/lib/loop-guard.js, hooks/lib/delivery-check.js,
+  hooks/lib/turn-timer.js, the hook-bypass refusals in hooks/lib/pre-bash.js,
+  rules/global/, rules/templates/adr.md,
+  plugins/rebenga/skills/{golang-testing,postgres-patterns,api-design,click-path-audit,production-audit}/

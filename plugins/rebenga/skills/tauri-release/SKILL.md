@@ -1,66 +1,68 @@
 ---
 name: tauri-release
-description: Publier une version d'une app de bureau Tauri v2 (macOS, Windows) via GitHub Actions et tauri-action, updater compris. À utiliser quand l'utilisateur dit « sors une version », « publie la release », « tag la v… », ou quand une release Tauri a échoué.
+description: Publish a release of a Tauri v2 desktop app (macOS, Windows) through GitHub Actions and tauri-action, updater included. Use when the user says « sors une version » ("cut a release"), « publie la release » ("publish the release"), « tag la v… » ("tag v…"), or when a Tauri release has failed.
 ---
 
-# Release Tauri v2
+# Tauri v2 release
 
-Une release ratée coûte cher : les runners macOS sont lents et facturés, et un
-job « vert » peut ne publier aucun fichier. On ne l'annonce qu'après avoir vu
-les fichiers sur la release et un `latest.json` valide.
+Reply to the user in French.
 
-## 1. Avant le tag
+A failed release is expensive: macOS runners are slow and billed, and a
+"green" job may publish no files at all. Announce it only after seeing the
+files on the release and a valid `latest.json`.
 
-- **Relecture** : lancer `rebenga:rust-tauri-reviewer` sur le diff depuis le
-  dernier tag (`git diff <dernier-tag>..HEAD`). Pas de tag avec un CRITIQUE ouvert.
-- **Version cohérente partout** : `tauri.conf.json` (`version`),
-  `src-tauri/Cargo.toml`, `package.json`, et `Cargo.lock` régénéré. Grep la
-  nouvelle version : elle doit apparaître dans chacun, identique.
-- **Secrets** : `gh secret list` doit montrer la clé de signature de l'updater
-  et son mot de passe (noms attendus par le workflow, souvent
-  `TAURI_SIGNING_PRIVATE_KEY` et `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`), plus
-  ceux de signature Apple/Windows s'ils sont utilisés. Ne jamais lire ni
-  afficher une valeur. Rappeler que la clé privée doit être sauvegardée hors de
-  la machine : la perdre, c'est ne plus pouvoir mettre à jour les installations.
-- **Updater** : `plugins.updater.pubkey` non vide, `endpoints` qui pointent vers
-  l'URL réellement servie, `bundle.createUpdaterArtifacts` actif, et
-  `uploadUpdaterJson` non désactivé dans le workflow.
+## 1. Before the tag
 
-## 2. Le workflow
+- **Review**: run `rebenga:rust-tauri-reviewer` on the diff since the last
+  tag (`git diff <dernier-tag>..HEAD`). No tag with an open CRITICAL.
+- **Consistent version everywhere**: `tauri.conf.json` (`version`),
+  `src-tauri/Cargo.toml`, `package.json`, and a regenerated `Cargo.lock`. Grep
+  the new version: it must appear in each one, identical.
+- **Secrets**: `gh secret list` must show the updater signing key and its
+  password (names expected by the workflow, often
+  `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`), plus
+  the Apple/Windows signing ones if used. Never read or display a value.
+  Remind the user that the private key must be backed up off the machine:
+  losing it means no longer being able to update installations.
+- **Updater**: `plugins.updater.pubkey` not empty, `endpoints` pointing to the
+  URL actually served, `bundle.createUpdaterArtifacts` enabled, and
+  `uploadUpdaterJson` not disabled in the workflow.
 
-Lire `.github/workflows/*.yml` en entier avant de taguer :
+## 2. The workflow
 
-- Déclencheur : quel motif de tag (`v*`…) et sur quelle branche.
-- Windows : les runners démarrent sous PowerShell. Toute étape écrite en bash
-  doit porter `shell: bash`, sinon `ParserError` — souvent après que macOS a
-  déjà été construit.
-- Release : si un job crée le brouillon, passer son id à tauri-action via
-  `releaseId` en sortie de job, ne pas le rechercher dans la liste des releases
-  (le brouillon peut ne pas y être encore). Un `releaseId` vide fait sauter
-  tous les uploads et le job finit quand même en succès.
-- Plusieurs jobs qui écrivent le même `latest.json` : les sérialiser
-  (`max-parallel: 1`) ou le fusionner dans un job final.
-- Dépôt privé : les URL de `latest.json` pointent vers l'API des assets, pas vers
-  un lien public nommé. Vérifier que ce qui sert l'updater sait les résoudre.
+Read `.github/workflows/*.yml` in full before tagging:
 
-## 3. Taguer et surveiller
+- Trigger: which tag pattern (`v*`…) and on which branch.
+- Windows: runners start under PowerShell. Any step written in bash must carry
+  `shell: bash`, otherwise `ParserError` — often after macOS has already been
+  built.
+- Release: if a job creates the draft, pass its id to tauri-action through
+  `releaseId` as a job output, do not look it up in the releases list (the
+  draft may not be there yet). An empty `releaseId` skips all uploads and the
+  job still ends in success.
+- Several jobs writing the same `latest.json`: serialize them
+  (`max-parallel: 1`) or merge it in a final job.
+- Private repo: the `latest.json` URLs point to the assets API, not to a named
+  public link. Check that whatever serves the updater can resolve them.
 
-1. Montrer à l'utilisateur la version, le tag et le commit ; attendre son accord.
+## 3. Tag and watch
+
+1. Show the user the version, the tag and the commit; wait for their approval.
 2. `git tag v<x.y.z> && git push origin v<x.y.z>`.
-3. `gh run list --workflow <fichier> -L 1`, puis `gh run watch <id> --exit-status`.
-4. `gh release view v<x.y.z> --json assets,isDraft` : un installeur, une archive
-   d'update et une signature `.sig` par plateforme, et `latest.json`.
-5. Télécharger `latest.json` (`gh release download v<x.y.z> -p latest.json`) :
-   bonne version, une entrée par plateforme, `signature` non vide.
+3. `gh run list --workflow <fichier> -L 1`, then `gh run watch <id> --exit-status`.
+4. `gh release view v<x.y.z> --json assets,isDraft`: one installer, one update
+   archive and one `.sig` signature per platform, and `latest.json`.
+5. Download `latest.json` (`gh release download v<x.y.z> -p latest.json`):
+   right version, one entry per platform, non-empty `signature`.
 
-## Retour arrière
+## Rollback
 
-- Run en échec avant upload : corriger, supprimer le tag local et distant
-  (`git push origin :refs/tags/v<x.y.z>`), le brouillon s'il existe, retaguer.
-- Version publiée défectueuse : ne pas supprimer une release déjà servie ; en
-  publier une supérieure. Un updater ne redescend pas de version.
+- Run failed before upload: fix, delete the local and remote tag
+  (`git push origin :refs/tags/v<x.y.z>`), the draft if it exists, retag.
+- Defective published version: do not delete a release already being served;
+  publish a higher one. An updater does not downgrade.
 
-## Rapport
+## Report
 
-Version, lien du run, liste des assets vus, contenu vérifié de `latest.json`,
-et ce qui n'a pas été vérifié (installation réelle sur chaque système).
+Version, run link, list of assets seen, verified contents of `latest.json`,
+and what was not verified (actual install on each OS).

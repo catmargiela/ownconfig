@@ -1,27 +1,29 @@
 ---
-description: Liste une par une les commandes Bash passées par la compression des sorties — date, commande, processeur, taille avant/après, gain.
+description: Lists one by one the Bash commands that went through output compression — date, command, processor, size before/after, gain.
 disable-model-invocation: true
-argument-hint: "[jours, 7 par défaut] [--toutes]"
+argument-hint: "[days, default 7] [--toutes]"
 ---
 
-Liste les commandes Bash compressées pendant la période demandée : `$ARGUMENTS`.
-Lecture seule : ne rien modifier, ne rien supprimer.
+Reply to the user in French.
 
-Source : `~/.claude/state/ccx/compress-stats.jsonl`, une ligne JSON par commande
-passée par le wrapper — `ts`, `cmd` (deux premiers mots seulement, jamais les
-arguments : un argument peut contenir un secret), `processor` (`node:git`,
-`ts:kubectl`…), `engine` (`node`, `python` ou `none`), `before` et `after`
-(en caractères), `exit`.
+List the Bash commands compressed during the requested period: `$ARGUMENTS`.
+Read-only: modify nothing, delete nothing.
 
-Arguments :
-- un nombre : la période en jours (7 si absent) ;
-- `--toutes` : inclure aussi les commandes enveloppées mais rendues brutes
-  (sortie de moins de 2000 caractères ou gain inférieur à 20 %).
+Source: `~/.claude/state/ccx/compress-stats.jsonl`, one JSON line per command
+that went through the wrapper — `ts`, `cmd` (first two words only, never the
+arguments: an argument may contain a secret), `processor` (`node:git`,
+`ts:kubectl`…), `engine` (`node`, `python` or `none`), `before` and `after`
+(in characters), `exit`.
 
-## 1. Lister
+Arguments:
+- a number: the period in days (7 if absent);
+- `--toutes`: also include commands that were wrapped but returned raw
+  (output under 2000 characters or gain below 20 %).
 
-Lancer exactement ce script, en lui passant les arguments tels quels
-(`$ARGUMENTS`, éventuellement vide) :
+## 1. List
+
+Run exactly this script, passing it the arguments as is
+(`$ARGUMENTS`, possibly empty):
 
 ```bash
 node -e '
@@ -36,12 +38,12 @@ console.log(`période: ${days} j · enveloppées: ${rows.length} · listées: ${
 for(const r of kept)console.log([d(r.ts),r.cmd,r.processor,`${r.before}→${r.after}`,`${pct(r)}%`,r.after<r.before?"compressée":"brute",`exit ${r.exit}`].join(" | "));' -- $ARGUMENTS
 ```
 
-Fichier absent ou vide : le dire, rappeler que la compression est coupée en
-profil `minimal`, avec `CCX_DISABLED=1` ou `CCX_COMPRESS=off`, et s'arrêter là.
+File missing or empty: say so, remind that compression is off in the
+`minimal` profile, with `CCX_DISABLED=1` or `CCX_COMPRESS=off`, and stop there.
 
-## 2. Afficher
+## 2. Display
 
-Rendre la liste en tableau, de la plus récente à la plus ancienne :
+Render the list as a table, most recent first:
 
 ```
 Commandes compressées — 7 derniers jours (3 sur 7 enveloppées)
@@ -50,8 +52,8 @@ Commandes compressées — 7 derniers jours (3 sur 7 enveloppées)
 | 23/09 15:12 | git log  | git        | 15 611 → 1 564       | 90 % | compressée | 0    |
 ```
 
-Au-delà de 50 lignes, afficher les 50 plus récentes et dire combien sont
-masquées. Ne rien interpréter de plus : pour les totaux et les classements,
-renvoyer vers `/rebenga:token-stats`.
+Beyond 50 lines, show the 50 most recent and say how many are
+hidden. Interpret nothing further: for totals and rankings,
+point to `/rebenga:token-stats`.
 
-Terminer par : « Sortie brute d'une commande : la préfixer par `CCX_RAW=1`. »
+End with: « Sortie brute d'une commande : la préfixer par `CCX_RAW=1`. »

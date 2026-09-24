@@ -1,90 +1,97 @@
 ---
 name: vault-note
-description: Écrire dans le vault Obsidian — contexte d'un projet, décision prise, préférence de travail, état avant compaction. À utiliser quand l'utilisateur dit "note ça", "retiens ça", "mets ça dans mon vault", avant de compacter, ou quand une décision structurante vient d'être prise.
+description: Write to the Obsidian vault — project context, a decision made, a working preference, state before compaction. Use when the user says "note ça" / "note this", "retiens ça" / "remember this", "mets ça dans mon vault" / "put this in my vault", before compacting, or when a structural decision has just been made.
 ---
 
-# Écrire dans le vault
+# Writing to the vault
 
-Le vault Obsidian est la mémoire longue. Le contexte d'une session disparaît à la
-compaction ; ce qui est dans le vault revient à chaque session suivante.
+Reply to the user in French.
 
-Emplacement : `~/Documents/Obsidian Vault/Claude/` (ou `$CC_VAULT`).
+The Obsidian vault is long-term memory. A session's context disappears at
+compaction; what is in the vault comes back in every following session.
+
+Location: `~/Documents/Obsidian Vault/Claude/` (or `$CC_VAULT`).
 
 ```
 Claude/
 ├── Index Claude.md
 ├── Profil/
-│   ├── Façon de coder.md    ← injecté à CHAQUE session, tous projets
+│   ├── Façon de coder.md    ← injected in EVERY session, all projects
 │   └── Stack.md
-├── Projets/<Projet>.md      ← injecté sur ce projet uniquement
+├── Projets/<Projet>.md      ← injected on this project only
 └── Journal/<date> — <Projet>.md
 ```
 
-## Règle de cohabitation
+## Coexistence rule
 
-Les blocs délimités par `<!-- claude:xxx:start -->` … `<!-- claude:xxx:end -->`
-sont gérés par les hooks. **Tout le reste appartient à l'utilisateur.**
+Blocks delimited by `<!-- claude:xxx:start -->` … `<!-- claude:xxx:end -->`
+are managed by the hooks. **Everything else belongs to the user.**
 
-Pour modifier une page : lire, éditer la section visée avec `Edit`, ne jamais
-réécrire le fichier entier avec `Write`. Une note effacée par mégarde ne se
-récupère pas.
+To modify a page: read, edit the target section with `Edit`, never
+rewrite the whole file with `Write`. An accidentally erased note cannot be
+recovered.
 
-## Où écrire quoi
+## Where to write what
 
 | Information | Destination |
 |---|---|
-| Vrai sur tous les projets (préférence, convention, décision tranchée) | `Profil/Façon de coder.md` |
-| Vrai sur ce projet seulement (architecture, piège, commande) | `Projets/<Projet>.md` |
-| Vrai à un instant donné (état du travail, ce qui reste) | `Journal/<date> — <Projet>.md` |
+| True across all projects (preference, convention, settled decision) | `Profil/Façon de coder.md` |
+| True for this project only (architecture, pitfall, command) | `Projets/<Projet>.md` |
+| True at a given moment (work state, what remains) | `Journal/<date> — <Projet>.md` |
 
-Le mauvais rangement le plus fréquent : mettre dans le profil ce qui ne concerne
-qu'un projet. Le profil est relu à chaque session, sur chaque projet — il se paie
-partout. Dans le doute, écrire dans la page projet.
+The most frequent misfiling: putting in the profile what only concerns
+one project. The profile is re-read in every session, on every project — it is paid for
+everywhere. When in doubt, write in the project page.
 
-## Ce qui mérite d'être noté
+A structural decision that belongs to a client project repo also deserves an
+ADR in that repo: propose `docs/adr/NNNN-slug.md` from
+`~/.claude-config/rules/templates/adr.md`, and ask before writing into the
+client repo. The vault note stays; the ADR is for the humans on that repo.
 
-- **Une décision et sa raison.** « On est passés à X parce que Y échouait sur Z. »
-  Le *pourquoi* est la seule chose que le code ne dit pas.
-- **Un piège vérifié.** Ce qui a fait perdre du temps, et comment le contourner.
-- **Une préférence exprimée par l'utilisateur.** Quand il corrige une manière de
-  faire, c'est durable — le noter évite de le refaire corriger.
-- **L'état du travail en cours**, avant compaction ou en fin de session.
+## What is worth noting
 
-## Ce qui ne mérite pas d'être noté
+- **A decision and its reason.** « On est passés à X parce que Y échouait sur Z. »
+  The *why* is the only thing the code does not say.
+- **A verified pitfall.** What wasted time, and how to work around it.
+- **A preference expressed by the user.** When they correct a way of
+  doing things, it is durable — noting it avoids having them correct it again.
+- **The state of work in progress**, before compaction or at the end of a session.
 
-- Ce que le code dit déjà : arborescence, liste de dépendances, signatures.
-- Le détail d'une session de débogage qui s'est bien terminée.
-- Une généralité vraie pour tout projet (« écrire des tests »). Elle est déjà
-  dans le `CLAUDE.md` global.
+## What is not worth noting
 
-Une page de projet dépasse rarement 60 lignes utiles. Au-delà, elle devient du
-contexte payé à chaque session pour de l'information qu'on ne relit jamais.
+- What the code already says: file tree, dependency list, signatures.
+- The details of a debugging session that ended well.
+- A generality true for any project ("write tests"). It is already
+  in the global `CLAUDE.md`.
 
-## Écrire
+A project page rarely exceeds 60 useful lines. Beyond that, it becomes
+context paid for in every session for information no one ever re-reads.
+
+## Writing
 
 ```bash
 V="$HOME/Documents/Obsidian Vault/Claude"
 ```
 
-Toujours lire la page avant d'y toucher :
+Always read the page before touching it:
 
 ```bash
 cat "$V/Projets/<Projet>.md"
 ```
 
-Puis `Edit` sur la section concernée. Relier les pages entre elles avec des liens
-`[[Nom de page]]` — c'est ce qui construit le graphe Obsidian et permet de
-retrouver un contexte par rebond.
+Then `Edit` the relevant section. Link pages together with
+`[[Nom de page]]` links — this is what builds the Obsidian graph and lets you
+find a context by following links.
 
-## Avant une compaction
+## Before a compaction
 
-C'est le moment le plus important : après, le détail n'existe plus.
+This is the most important moment: afterwards, the details no longer exist.
 
-1. Écrire dans le journal du jour : ce qui a été fait, où en est le travail, ce
-   qui reste, et toute décision prise pendant la session.
-2. Remonter dans `Projets/<Projet>.md` ce qui est durable (une décision, un
-   piège) — le journal est daté, la page projet est permanente.
-3. Puis seulement, proposer `/compact` à l'utilisateur.
+1. Write in today's journal: what was done, where the work stands, what
+   remains, and any decision made during the session.
+2. Move up into `Projets/<Projet>.md` what is durable (a decision, a
+   pitfall) — the journal is dated, the project page is permanent.
+3. Only then, suggest `/compact` to the user.
 
-Une compaction faite après cette écriture ne perd que des tokens. Faite avant,
-elle perd de l'information.
+A compaction done after this writing loses only tokens. Done before,
+it loses information.

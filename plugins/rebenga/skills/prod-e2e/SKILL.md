@@ -1,67 +1,68 @@
 ---
 name: prod-e2e
-description: Suite Playwright versionnée dans le dépôt et lancée contre la production sans risque — comptes de test jetables, parcours en lecture, identifiants par variables d'environnement. À utiliser quand on veut vérifier la production après un déploiement, tester en prod, ou écrire des tests e2e de production.
+description: A Playwright suite versioned in the repo and run safely against production — disposable test accounts, read-only journeys, credentials from environment variables. Use when verifying production after a deploy, testing in prod, or writing production e2e tests.
 ---
 
-# Tests e2e contre la production
+# E2e tests against production
 
-Vérifier la production par des tests, c'est accepter qu'ils tournent sur de
-vraies données. La suite doit donc être plus prudente qu'une suite de dev : elle
-ne peut rien casser, rien polluer, et rien laisser derrière elle.
+Reply to the user in French.
 
-## Une suite, pas un script
+Verifying production with tests means accepting that they run on real data.
+So the suite must be more careful than a dev suite: it can break nothing,
+pollute nothing, and leave nothing behind.
 
-- Elle vit **dans le dépôt du projet**, par exemple `e2e/prod/`, avec son propre
-  projet Playwright (`projects: [{ name: 'prod', testDir: 'e2e/prod' }]`) ou sa
-  propre config. Elle est relue, versionnée et relancée à chaque déploiement.
-- Pas de script jetable dans un dossier temporaire : ce qui n'est pas dans le
-  dépôt ne sera pas relancé.
-- Le plugin MCP Playwright sert à **explorer** un écran ou reproduire un bug à
-  la main. Ce qu'on en apprend devient ensuite un test dans la suite.
+## A suite, not a script
 
-## Comptes de test
+- It lives **in the project's repo**, for example `e2e/prod/`, with its own
+  Playwright project (`projects: [{ name: 'prod', testDir: 'e2e/prod' }]`) or
+  its own config. It is reviewed, versioned and rerun on every deploy.
+- No throwaway script in a temp folder: what is not in the repo will not be
+  rerun.
+- The Playwright MCP plugin is for **exploring** a screen or reproducing a bug
+  by hand. What you learn from it then becomes a test in the suite.
 
-- Des comptes dédiés et jetables, nommés `e2e-<horodatage>-<aléa>`, créés par
-  le setup de la suite (par API si possible) et **supprimés** en teardown, même
-  en cas d'échec (`globalTeardown` ou fixture avec nettoyage).
-- Jamais le compte d'un vrai utilisateur, jamais un compte administrateur
-  partagé. Droits minimaux pour les parcours couverts.
-- Si le projet ne permet pas de créer un compte proprement, le dire et demander
-  un compte de test permanent plutôt que contourner.
+## Test accounts
 
-## Ce qu'on teste
+- Dedicated, disposable accounts, named `e2e-<horodatage>-<aléa>`, created by
+  the suite's setup (through the API if possible) and **deleted** in teardown,
+  even on failure (`globalTeardown` or a fixture with cleanup).
+- Never a real user's account, never a shared admin account. Minimum
+  permissions for the covered journeys.
+- If the project does not allow creating an account cleanly, say so and ask
+  for a permanent test account rather than working around it.
 
-- **Lecture d'abord** : connexion, pages principales, recherche, affichage d'une
-  fiche, téléchargement d'un document, santé de l'API.
-- Écriture : seulement sur des objets créés par la suite elle-même, préfixés
-  `e2e-`, et effacés à la fin.
-- **Interdit** : supprimer, modifier ou envoyer quoi que ce soit sur une donnée
-  réelle, déclencher un paiement, un e-mail ou une notification vers une
-  personne réelle, un import en masse.
+## What to test
 
-## Identifiants et configuration
+- **Reads first**: login, main pages, search, displaying a record,
+  downloading a document, API health.
+- Writes: only on objects created by the suite itself, prefixed `e2e-`, and
+  deleted at the end.
+- **Forbidden**: deleting, modifying or sending anything on real data,
+  triggering a payment, an email or a notification to a real person, a bulk
+  import.
 
-- URL et identifiants par variables d'environnement uniquement
-  (`E2E_BASE_URL`, `E2E_ADMIN_TOKEN`…), documentées dans `.env.example` sans
-  valeur. Jamais dans le code, jamais dans un `storageState` commité.
-- Le fichier `storageState` va dans un chemin ignoré par git.
+## Credentials and configuration
 
-## Lancer
+- URL and credentials from environment variables only
+  (`E2E_BASE_URL`, `E2E_ADMIN_TOKEN`…), documented in `.env.example` without
+  values. Never in the code, never in a committed `storageState`.
+- The `storageState` file goes to a git-ignored path.
+
+## Running
 
 ```bash
 E2E_BASE_URL=https://<domaine> npx playwright test --project=prod
-npx playwright test --project=prod --reporter=list   # compte lisible
-npx playwright test --project=prod --trace on        # pour déboguer
+npx playwright test --project=prod --reporter=list   # readable count
+npx playwright test --project=prod --trace on        # for debugging
 ```
 
-Headless par défaut, `retries: 0` : un échec en production se lit, il ne se
-relance pas jusqu'au vert. Rapporter `N réussis / M échoués / K ignorés`, les
-tests en échec avec leur cause, et confirmer que les comptes `e2e-*` ont bien
-été supprimés.
+Headless by default, `retries: 0`: a production failure is read, not rerun
+until green. Report `N réussis / M échoués / K ignorés`, the failing tests
+with their cause, and confirm that the `e2e-*` accounts were actually deleted.
 
-## Déléguer
+## Delegating
 
-Pour écrire, lancer et déboguer la suite, utiliser l'agent
-`rebenga:e2e-runner`. Lui donner l'URL de production, les parcours à couvrir,
-le nom des variables d'environnement et l'**accord explicite** de
-l'utilisateur pour lancer contre la production — sans cet accord, il refuse.
+To write, run and debug the suite, use the `rebenga:e2e-runner` agent. Give it
+the production URL, the journeys to cover, the names of the environment
+variables and the user's **explicit approval** to run against production —
+without that approval, it refuses.
