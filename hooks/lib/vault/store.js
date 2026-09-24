@@ -35,6 +35,17 @@ const FORBIDDEN = [
   path.join('.claude', 'state'),
 ];
 
+/**
+ * This config repository itself, identified by where this file lives — not by
+ * its folder name, which differs between clones (CI checkout, `~/ownconfig`…).
+ */
+const CONFIG_REPO = (() => {
+  const root = path.resolve(__dirname, '..', '..', '..');
+  try { return fs.realpathSync(root); } catch { return root; }
+})();
+
+const insideConfigRepo = (real) => real === CONFIG_REPO || real.startsWith(CONFIG_REPO + path.sep);
+
 const debug = (msg) => { if (process.env.CCX_DEBUG === '1') process.stderr.write(`[vault] ${msg}\n`); };
 
 /**
@@ -52,6 +63,7 @@ function vaultStatus() {
 
   const hit = FORBIDDEN.find((frag) => real.includes(path.sep + frag) || real.endsWith(path.sep + frag));
   if (hit) return { ok: false, why: `emplacement interdit (contient « ${hit} »)` };
+  if (insideConfigRepo(real)) return { ok: false, why: 'emplacement interdit (dépôt de configuration)' };
 
   const explicit = Boolean(process.env.CC_VAULT);
   if (!explicit && !fs.existsSync(path.join(real, '.obsidian'))) {
