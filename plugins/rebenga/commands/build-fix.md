@@ -1,56 +1,58 @@
 ---
-description: Relance le build en échec, délègue la réparation à l'agent build-fixer, puis prouve le vert par une nouvelle exécution.
-argument-hint: "[commande de build, vide = détection auto]"
+description: Re-runs the failing build, delegates the repair to the build-fixer agent, then proves it green with a fresh run.
+argument-hint: "[build command, empty = auto-detect]"
 ---
 
-Répare le build du dépôt courant. Commande fournie : `$ARGUMENTS`
+Reply to the user in French.
 
-Le succès se mesure à une seule chose : la commande passe à nouveau, et la
-sortie le montre.
+Fix the build of the current repository. Command given: `$ARGUMENTS`
 
-## 1. Trouver la commande
+Success is measured by one thing only: the command passes again, and the
+output shows it.
 
-Si `$ARGUMENTS` est vide, la détecter dans cet ordre, et s'arrêter à la première
-qui s'applique :
+## 1. Find the command
 
-- `package.json` : lire `scripts` (clé ciblée : `jq '.scripts' package.json`).
-  Prendre `build`, sinon `typecheck`, sinon `tsc --noEmit`. Le gestionnaire se
-  déduit du lockfile : `pnpm-lock.yaml`, `yarn.lock`, `bun.lockb`, sinon `npm`.
-- `go.mod` : `go build ./...` puis `go vet ./...`.
-- `pyproject.toml` / `setup.cfg` : l'outil de type déclaré (`mypy`, `pyright`),
-  sinon `python -m compileall -q .`.
-- `Cargo.toml` : `cargo build`.
-- `Makefile` : la cible `build` si elle existe (`make -n build` pour vérifier).
+If `$ARGUMENTS` is empty, detect it in this order, stopping at the first one
+that applies:
 
-Si rien ne s'applique, ou si plusieurs chaînes coexistent sans signal clair,
-demander à l'utilisateur plutôt que deviner.
+- `package.json`: read `scripts` (targeted key: `jq '.scripts' package.json`).
+  Take `build`, else `typecheck`, else `tsc --noEmit`. Infer the package manager
+  from the lockfile: `pnpm-lock.yaml`, `yarn.lock`, `bun.lockb`, else `npm`.
+- `go.mod`: `go build ./...` then `go vet ./...`.
+- `pyproject.toml` / `setup.cfg`: the declared type checker (`mypy`, `pyright`),
+  else `python -m compileall -q .`.
+- `Cargo.toml`: `cargo build`.
+- `Makefile`: the `build` target if it exists (`make -n build` to check).
 
-## 2. Constater l'échec
+If nothing applies, or if several toolchains coexist without a clear signal,
+ask the user rather than guess.
 
-Lancer la commande et garder la sortie **entière**. Si elle passe déjà, le dire
-et s'arrêter : il n'y a rien à réparer.
+## 2. Confirm the failure
 
-## 3. Déléguer
+Run the command and keep the **entire** output. If it already passes, say so
+and stop: there is nothing to fix.
 
-Appeler l'outil Agent avec `subagent_type: build-fixer` (agent utilisateur, sans
-préfixe de plugin). Lui passer :
+## 3. Delegate
 
-- la commande exacte et le répertoire de travail ;
-- la sortie d'erreur (les 80 premières lignes suffisent si elle est longue) ;
-- le rappel de ses interdits : pas d'`any`, pas de `@ts-ignore`, pas
-  d'`eslint-disable`, pas de `--no-verify`, pas de test supprimé ou ignoré,
-  pas de config assouplie.
+Call the Agent tool with `subagent_type: build-fixer` (user agent, no plugin
+prefix). Pass it:
 
-## 4. Prouver
+- the exact command and the working directory;
+- the error output (the first 80 lines are enough if it is long);
+- a reminder of what it must not do: no `any`, no `@ts-ignore`, no
+  `eslint-disable`, no `--no-verify`, no deleted or skipped test,
+  no loosened config.
 
-Relancer **toi-même** la même commande après le retour de l'agent. Ne pas se fier
-à son rapport seul.
+## 4. Prove
 
-- Vert : montrer les dernières lignes de sortie et le code de retour.
-- Encore rouge : montrer la nouvelle erreur et dire ce qui reste. Ne pas
-  annoncer une réparation partielle comme un succès.
+Re-run the same command **yourself** after the agent returns. Do not rely on
+its report alone.
 
-## Rapport
+- Green: show the last lines of output and the exit code.
+- Still red: show the new error and say what remains. Do not present a
+  partial fix as a success.
+
+## Report
 
 ```
 Commande : pnpm build
@@ -59,5 +61,5 @@ Fichiers touchés : src/lib/report.ts
 Preuve : exit 0 — "✓ Compiled successfully"
 ```
 
-Si l'agent a dû s'arrêter sur un choix qui affaiblit un garde-fou, relayer sa
-question à l'utilisateur telle quelle.
+If the agent had to stop on a choice that weakens a safeguard, relay its
+question to the user as is.

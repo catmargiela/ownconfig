@@ -1,77 +1,79 @@
 ---
 name: verification-loop
-description: Séquence de vérification à passer avant d'annoncer qu'un travail est terminé, avant d'ouvrir une PR, ou avant un déploiement. À utiliser quand on s'apprête à dire "c'est fait", "ça marche" ou "prêt à merger".
+description: Verification sequence to run before announcing that work is done, before opening a PR, or before a deployment. Use when about to say "c'est fait" / "it's done", "ça marche" / "it works" or "prêt à merger" / "ready to merge".
 ---
 
-# Boucle de vérification
+# Verification loop
 
-« Ça marche » est une affirmation qui exige une commande exécutée et sa sortie.
-Cette skill fournit la séquence, dans l'ordre où elle coûte le moins cher.
+Reply to the user in French.
 
-## Ordre
+"It works" is a claim that requires an executed command and its output.
+This skill provides the sequence, in order from cheapest to most expensive.
 
-L'ordre n'est pas arbitraire : chaque étape est plus lente que la précédente, et
-échouer tôt évite de payer les suivantes. **S'arrêter à la première étape rouge**
-et la corriger avant de continuer.
+## Order
 
-### 1. Le code compile
+The order is not arbitrary: each step is slower than the previous one, and
+failing early avoids paying for the next ones. **Stop at the first red step**
+and fix it before continuing.
+
+### 1. The code compiles
 
 ```bash
-# détecter le gestionnaire de paquets d'abord : lockfile présent
+# detect the package manager first: lockfile present
 npm run build 2>&1 | tail -30
 ```
 
-### 2. Les types sont corrects
+### 2. The types are correct
 
 ```bash
 npx --no-install tsc --noEmit 2>&1 | head -30
 ```
 
-Une erreur de type n'est pas cosmétique. Elle se corrige à la source — jamais par
-`any`, `as`, `@ts-ignore` ou un assouplissement de `tsconfig.json`.
+A type error is not cosmetic. It gets fixed at the source — never with
+`any`, `as`, `@ts-ignore` or loosening `tsconfig.json`.
 
-### 3. Le lint passe
+### 3. Lint passes
 
 ```bash
 npm run lint 2>&1 | head -30
 ```
 
-Corriger le code, pas la règle.
+Fix the code, not the rule.
 
-### 4. Les tests passent
+### 4. Tests pass
 
 ```bash
 npm test 2>&1 | tail -40
 ```
 
-Rapporter les chiffres réels : X passés, Y échoués. Un test ignoré (`skip`) se
-signale, il ne se comptabilise pas comme un succès.
+Report the real numbers: X passed, Y failed. A skipped test (`skip`) is
+reported, it does not count as a success.
 
-### 5. Rien de sensible ne part avec
+### 5. Nothing sensitive goes out with it
 
 ```bash
 git diff --staged --name-only
 git diff --staged | grep -nEi '(api[_-]?key|secret|password|token|BEGIN.*PRIVATE KEY)[\"'"'"']?\s*[:=]' || echo "aucun secret apparent"
 ```
 
-Vérifier aussi qu'aucun `.env`, dump de base ou fichier de credentials n'est
-dans le diff.
+Also check that no `.env`, database dump or credentials file is
+in the diff.
 
-### 6. Le comportement, pas seulement la chaîne d'outils
+### 6. The behavior, not just the toolchain
 
-Les cinq étapes précédentes prouvent que le code est bien formé, pas qu'il fait
-ce qui était demandé. Relire la demande initiale et vérifier le chemin utilisateur
-concerné — en lançant l'application si c'est faisable.
+The five previous steps prove the code is well-formed, not that it does
+what was asked. Re-read the initial request and check the relevant user path
+— by launching the application if feasible.
 
-## Rapport
+## Report
 
-Annoncer le résultat par étape, avec les vrais chiffres :
+Announce the result per step, with the real numbers:
 
 ```
 build ✓  types ✓  lint ✓  tests 42/42 ✓  secrets ✓
 Comportement vérifié : upload d'un fichier > 5 Mo rejeté avec le message attendu.
 ```
 
-Toute étape non exécutée se déclare comme non exécutée. Ne jamais présenter une
-étape sautée comme un succès — c'est le seul manquement qui rend tout le reste
-inutilisable.
+Any step not executed is declared as not executed. Never present a
+skipped step as a success — it is the one failing that makes everything else
+unusable.

@@ -1,22 +1,24 @@
 ---
 name: git-ship
-description: Préparer un commit ou une pull request propre — découpage, message conventionnel, description de PR. À utiliser quand on s'apprête à committer, à pousser ou à ouvrir une PR.
+description: Prepare a clean commit or pull request — splitting, conventional message, PR description. Use when about to commit, push or open a PR.
 ---
 
-# Committer et ouvrir une PR
+# Committing and opening a PR
 
-## Avant de committer
+Reply to the user in French.
+
+## Before committing
 
 ```bash
-git status                # ce qui va partir
-git diff                  # ce qu'on a réellement écrit
+git status                # what is about to go out
+git diff                  # what was actually written
 ```
 
-Ne jamais faire `git add -A` sans avoir lu `git status`. Fichiers de build,
-`.env`, dumps, captures d'écran et artefacts de test s'y glissent en silence.
+Never run `git add -A` without having read `git status`. Build files,
+`.env`, dumps, screenshots and test artifacts slip in silently.
 
-Un commit = un changement cohérent. Si le message a besoin d'un « et », il y a
-probablement deux commits.
+One commit = one coherent change. If the message needs an "and", there are
+probably two commits.
 
 ## Message
 
@@ -24,10 +26,10 @@ probablement deux commits.
 <type>(<portée>): <ce que ça change, à l'impératif, en minuscule>
 ```
 
-Types : `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`.
+Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`.
 
-Le sujet dit **ce qui change**. Le corps, s'il existe, dit **pourquoi** — c'est
-la seule information que le diff ne contient pas.
+The subject says **what changes**. The body, if any, says **why** — it is
+the only information the diff does not contain.
 
 ```
 fix(upload): rejeter les fichiers > 5 Mo avant lecture en mémoire
@@ -36,26 +38,26 @@ Le contrôle de taille arrivait après le buffer complet, ce qui permettait
 de saturer la RAM du serveur avec quelques requêtes simultanées.
 ```
 
-Jamais de `--no-verify`. Si un hook de pré-commit échoue, il a une raison.
+Never `--no-verify`. If a pre-commit hook fails, it has a reason.
 
 ## Pull request
 
-Titre : même forme qu'un message de commit.
+Title: same form as a commit message.
 
-Corps, dans cet ordre :
+Body, in this order:
 
-1. **Ce que ça change** — deux ou trois lignes, en langage utilisateur.
-2. **Pourquoi** — le problème résolu, ou le ticket.
-3. **Comment tester** — les étapes exactes qu'un relecteur doit suivre pour
-   vérifier lui-même. C'est la section la plus utile et la plus souvent bâclée.
-4. **Risques** — ce qui pourrait casser ailleurs, ce qui n'a pas été couvert.
+1. **Ce que ça change** — two or three lines, in user language.
+2. **Pourquoi** — the problem solved, or the ticket.
+3. **Comment tester** — the exact steps a reviewer must follow to
+   verify it themselves. This is the most useful section and the most often botched.
+4. **Risques** — what could break elsewhere, what was not covered.
 
-Construire le résumé à partir de **tous** les commits de la branche
-(`git log main..HEAD`), pas du seul dernier.
+Build the summary from **all** the commits on the branch
+(`git log main..HEAD`), not just the last one.
 
-## Garde-fous
+## Guardrails
 
-- Ne jamais pousser sur `main` ni forcer un push sans demande explicite.
-- Préférer `--force-with-lease` à `--force` : il refuse d'écraser le travail
-  d'un autre.
-- Vérifier la branche de destination avant d'ouvrir la PR.
+- Never push to `main` or force-push without an explicit request.
+- Prefer `--force-with-lease` over `--force`: it refuses to overwrite
+  someone else's work.
+- Check the target branch before opening the PR.

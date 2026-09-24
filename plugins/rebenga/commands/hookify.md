@@ -1,67 +1,69 @@
 ---
-description: Transforme un comportement à interdire en contrôle de hook testé dans le dépôt de config — à partir d'une description ou de l'analyse des sessions récentes.
+description: Turns a behaviour to forbid into a tested hook check in the config repository — from a description or from analysing recent sessions.
 disable-model-invocation: true
-argument-hint: "[comportement à interdire, ou vide pour analyser les sessions]"
+argument-hint: "[behaviour to forbid, or empty to analyse sessions]"
 ---
 
-Hookifier : `$ARGUMENTS`
+Reply to the user in French.
 
-Une consigne répétée dans le chat s'oublie ; un contrôle dans le dispatcher ne
-s'oublie pas. Le but est un module de hook testé, jamais une règle écrite à la
-va-vite dans la config vivante.
+Hookify: `$ARGUMENTS`
 
-## 1. Trouver la règle
+An instruction repeated in the chat gets forgotten; a check in the dispatcher
+does not. The goal is a tested hook module, never a rule hastily written into
+the live config.
 
-- **Argument fourni** : partir de lui. Demander un exemple concret de commande
-  ou d'édition fautive s'il n'y en a pas.
-- **Argument vide** : lancer l'agent `rebenga:conversation-analyzer` sur les
-  20 dernières sessions. Montrer sa liste classée, puis demander **quelle règle
-  implémenter**. Une seule par passage.
+## 1. Find the rule
 
-## 2. Spécifier avant d'écrire
+- **Argument given**: start from it. Ask for a concrete example of a faulty
+  command or edit if there is none.
+- **Empty argument**: run the `rebenga:conversation-analyzer` agent on the
+  last 20 sessions. Show its ranked list, then ask **which rule to
+  implement**. Only one per run.
 
-Présenter et faire valider :
+## 2. Specify before writing
 
-| Champ | Contenu |
+Present and get approval for:
+
+| Field | Content |
 |---|---|
-| Événement | `pre-bash`, `pre-edit`, `post-edit`, `stop`, `pre-compact` ou `session-start` |
-| Cible | champ lu dans l'entrée : `tool_input.command`, `file_path`, contenu écrit |
-| Déclencheur | condition exacte, avec 3 exemples qui doivent déclencher et 3 qui ne doivent pas |
-| Action | **refus** (exit 2, message français qui dit quoi faire à la place) ou **avertissement** (`util.warn()`, une fois par cible et par session) |
-| Profils | `minimal` = refus durs seulement ; `standard` par défaut ; `strict` pour le zèle |
-| Faux positifs | où ça peut mordre à tort (texte cité, heredoc, commentaire) et comment on l'évite |
+| Event | `pre-bash`, `pre-edit`, `post-edit`, `stop`, `pre-compact` or `session-start` |
+| Target | field read from the input: `tool_input.command`, `file_path`, written content |
+| Trigger | exact condition, with 3 examples that must trigger and 3 that must not |
+| Action | **deny** (exit 2, French message saying what to do instead) or **warning** (`util.warn()`, once per target and per session) |
+| Profiles | `minimal` = hard denials only; `standard` by default; `strict` for zeal |
+| False positives | where it may bite wrongly (quoted text, heredoc, comment) and how to avoid it |
 
-Dans le doute, avertir plutôt que refuser : un refus à tort bloque le travail.
+When in doubt, warn rather than deny: a wrong denial blocks the work.
 
-## 3. Implémenter dans le dépôt de config
+## 3. Implement in the config repository
 
-Dans `~/.claude-config`, **sur une branche** (`git switch -c feat/hook-<nom>`).
-Les hooks installés pointent vers ce dépôt : si le checkout est lié en direct,
-travailler dans un `git worktree` pour ne rien changer à la session en cours.
+In `~/.claude-config`, **on a branch** (`git switch -c feat/hook-<nom>`).
+Installed hooks point to this repository: if the checkout is linked directly,
+work in a `git worktree` so nothing changes in the current session.
 
-1. Lire `hooks/dispatch.js`, `hooks/lib/util.js` et un module voisin
-   (`bash-hygiene.js` pour un avertissement, `secret-guard.js` pour un refus)
-   en entier. Réutiliser `stripQuoted` / `stripHeredocs` de `pre-bash.js`.
-2. Créer `hooks/lib/<nom>.js` : `run(input)` qui sort tôt si
-   `!enabled([...profils])`, la détection en fonction pure exportée, puis
-   `deny(message)` ou `warn(message)`. Aucune exception ne doit remonter.
-3. L'ajouter à la table `EVENTS` de `dispatch.js`, à la bonne place : les refus
-   avant les avertissements, sans réordonner les modules existants.
-4. Tests dans `test.js`, nouveau `group(...)` : cas positifs, cas négatifs
-   (dont les faux positifs identifiés), un test par profil concerné et un avec
-   `CCX_DISABLED=1`, plus un appel réel via `hook(...)` qui vérifie le code de
-   sortie.
-5. README : ligne du tableau `Hooks`, profils si besoin, compteurs de l'intro.
+1. Read `hooks/dispatch.js`, `hooks/lib/util.js` and a neighbouring module
+   (`bash-hygiene.js` for a warning, `secret-guard.js` for a denial)
+   in full. Reuse `stripQuoted` / `stripHeredocs` from `pre-bash.js`.
+2. Create `hooks/lib/<nom>.js`: `run(input)` that returns early if
+   `!enabled([...profils])`, the detection as an exported pure function, then
+   `deny(message)` or `warn(message)`. No exception may propagate.
+3. Add it to the `EVENTS` table in `dispatch.js`, in the right place: denials
+   before warnings, without reordering existing modules.
+4. Tests in `test.js`, new `group(...)`: positive cases, negative cases
+   (including the identified false positives), one test per relevant profile
+   and one with `CCX_DISABLED=1`, plus a real call via `hook(...)` that checks
+   the exit code.
+5. README: row in the `Hooks` table, profiles if needed, counters in the intro.
 
-## 4. Prouver
+## 4. Prove
 
-`node test.js` → la sortie complète, zéro `FAIL`. Un test existant qui passe au
-rouge se corrige dans le nouveau module, **jamais** en modifiant ou retirant le
-test ni en affaiblissant un garde-fou existant.
+`node test.js` → the full output, zero `FAIL`. An existing test that turns
+red is fixed in the new module, **never** by modifying or removing the
+test nor by weakening an existing safeguard.
 
-## 5. S'arrêter là
+## 5. Stop there
 
-Montrer le diff, la sortie des tests et le message de refus ou d'avertissement
-tel qu'il s'affichera. Ne pas merger, ne pas relancer `install.js`, ne rien
-activer dans la config vivante sans un oui explicite. Pas de commit sans
-demande ; s'il est demandé : `feat(hooks): …`.
+Show the diff, the test output and the deny or warning message as it will be
+displayed. Do not merge, do not re-run `install.js`, do not enable anything in
+the live config without an explicit yes. No commit unless asked; if asked:
+`feat(hooks): …`.

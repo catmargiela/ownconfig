@@ -1,76 +1,77 @@
 ---
-description: Déploie avec le script du projet après accord, puis prouve par la sortie des commandes que services, migrations, santé, proxy, bundle et .env sont bons.
+description: Deploys with the project's script after consent, then proves from command output that services, migrations, health, proxy, bundle and .env are good.
 disable-model-invocation: true
-argument-hint: "[environnement, vide = production]"
+argument-hint: "[environment, empty = production]"
 ---
 
-Déployer et vérifier. Environnement : `$ARGUMENTS` (vide = production).
+Reply to the user in French.
 
-Un déploiement n'est fini que quand chaque ligne de la checklist a une preuve :
-une commande exécutée et sa sortie. Rien de ce qui suit n'est codé en dur, tout
-se **découvre** dans le projet ou se demande.
+Deploy and verify. Environment: `$ARGUMENTS` (empty = production).
 
-## 1. Découvrir
+A deployment is only done when every line of the checklist has proof:
+a command that was run and its output. Nothing below is hardcoded; everything
+is **discovered** in the project or asked for.
 
-Lire, sans rien lancer : `CLAUDE.md` et `.claude/` du projet, le script de
-déploiement (`deploy.sh`, `deploy/`, cible `deploy` du `Makefile`), les
-`docker-compose*.yml`, `.env.example`. En tirer :
+## 1. Discover
 
-- la commande de déploiement et l'hôte cible (alias ssh, jamais une IP recopiée) ;
-- le fichier compose et le projet compose utilisés en production ;
-- les services attendus : `docker compose -f <fichier> config --services`
-  (**jamais** `config` seul, qui imprime les variables résolues) ;
-- les services censés avoir un `healthcheck` ;
-- l'URL de santé (`/health`, `/healthz`, `/status`…) dans le `CLAUDE.md` ou le
-  routeur ; le dossier des migrations et l'outil (goose ou autre) ;
-- le conteneur du reverse proxy et le chemin de sa config.
+Read, without running anything: the project's `CLAUDE.md` and `.claude/`, the
+deployment script (`deploy.sh`, `deploy/`, `deploy` target of the `Makefile`),
+the `docker-compose*.yml` files, `.env.example`. Derive from them:
 
-Ce qui manque ou reste ambigu : le demander. Ne pas deviner un hôte.
+- the deploy command and the target host (ssh alias, never a copied IP);
+- the compose file and compose project used in production;
+- the expected services: `docker compose -f <fichier> config --services`
+  (**never** `config` alone, which prints the resolved variables);
+- the services supposed to have a `healthcheck`;
+- the health URL (`/health`, `/healthz`, `/status`…) in the `CLAUDE.md` or the
+  router; the migrations folder and the tool (goose or other);
+- the reverse proxy container and the path to its config.
 
-## 2. Confirmer
+Anything missing or ambiguous: ask. Do not guess a host.
 
-Déployer est une action visible de l'extérieur. Montrer la commande exacte,
-l'hôte, le commit (`git log -1 --oneline`) et ce qui n'est pas poussé, puis
-**attendre un oui explicite**. Sans oui, s'arrêter là.
+## 2. Confirm
 
-## 3. Déployer
+Deploying is an externally visible action. Show the exact command, the host,
+the commit (`git log -1 --oneline`) and what is not pushed, then **wait for an
+explicit yes**. Without a yes, stop there.
 
-Lancer le script tel quel et garder la sortie entière. Échec : s'arrêter,
-montrer l'erreur, ne rien relancer ni corriger sur le serveur.
+## 3. Deploy
 
-## 4. Vérifier, dans l'ordre, arrêt au premier rouge
+Run the script as is and keep the entire output. On failure: stop, show the
+error, do not re-run or fix anything on the server.
 
-1. **Services** : `docker compose ps --format '{{.Service}} {{.State}} {{.Health}}'`
-   sur l'hôte. Nombre de services `running` = nombre attendu en 1 ; chaque
-   service à healthcheck est `healthy` (attendre `starting` sans `sleep` fixe :
-   boucle bornée ou Monitor). Si d'autres projets partagent l'hôte, vérifier
-   qu'ils tournent toujours.
-2. **Migrations** : version appliquée = plus haut numéro du dossier. Avec goose,
-   `goose status` si le DSN est déjà dans l'environnement du conteneur, sinon
+## 4. Verify, in order, stopping at the first red
+
+1. **Services**: `docker compose ps --format '{{.Service}} {{.State}} {{.Health}}'`
+   on the host. Number of `running` services = number expected in 1; each
+   service with a healthcheck is `healthy` (wait out `starting` without a fixed
+   `sleep`: bounded loop or Monitor). If other projects share the host, check
+   they are still running.
+2. **Migrations**: applied version = highest number in the folder. With goose,
+   `goose status` if the DSN is already in the container's environment, else
    `SELECT max(version_id) FROM goose_db_version WHERE is_applied` via `psql`
-   dans le conteneur de base, SQL entre guillemets simples. Ne jamais taper un
-   DSN avec mot de passe en ligne de commande.
-3. **Santé** : `curl -sS -o /dev/null -w '%{http_code}\n' <url>` → 200. Pour une
-   route neuve protégée, 401 contre 404 sur un chemin inventé prouve qu'elle
-   existe.
-4. **Proxy** : validation dans son conteneur, par exemple
+   in the database container, SQL in single quotes. Never type a DSN with a
+   password on the command line.
+3. **Health**: `curl -sS -o /dev/null -w '%{http_code}\n' <url>` → 200. For a
+   new protected route, 401 versus 404 on a made-up path proves it
+   exists.
+4. **Proxy**: validation inside its container, for example
    `caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile`.
-5. **Bundle servi** : `curl -sS --compressed <url>/` et comparer les noms hachés
-   des scripts (ou le build ID) à ceux du build local qui vient d'être déployé ;
-   ou l'`ETag` avant/après. Même hash qu'avant = l'ancien front est encore servi.
-6. **`.env`** : lignes sans `=`, **sans jamais afficher de valeur** :
+5. **Served bundle**: `curl -sS --compressed <url>/` and compare the hashed
+   script names (or the build ID) with those of the local build just deployed;
+   or the `ETag` before/after. Same hash as before = the old front is still served.
+6. **`.env`**: lines without `=`, **never printing a value**:
    `awk 'NF && $0 !~ /^[[:space:]]*#/ && index($0, "=") == 0 { print NR }' .env`
-   → numéros de ligne seulement. Une telle ligne fait refuser le fichier par
-   `docker compose` au prochain démarrage. Pour les clés : `cut -d= -f1`.
+   → line numbers only. Such a line makes `docker compose` reject the file on
+   the next start. For keys: `cut -d= -f1`.
 
-## Interdits en production
+## Forbidden in production
 
-Aucune commande destructive : pas de `down -v`, `rm`, `prune`, `DROP`,
-`DELETE`, `TRUNCATE`, pas de `goose down`, pas d'écriture en base. Pas de
-correctif à chaud sur le serveur. Au premier rouge : arrêter, rapporter,
-proposer — ne pas réparer sans accord.
+No destructive command: no `down -v`, `rm`, `prune`, `DROP`,
+`DELETE`, `TRUNCATE`, no `goose down`, no database writes. No hotfix on the
+server. At the first red: stop, report, propose — do not fix without consent.
 
-## Rapport
+## Report
 
 ```
 Déploiement : production — a1b2c3d (exit 0)
@@ -82,4 +83,4 @@ Déploiement : production — a1b2c3d (exit 0)
 [ ] .env         non vérifié (arrêt avant)
 ```
 
-Chaque ✓ cite la sortie qui le prouve ; chaque ligne non vérifiée le dit.
+Each ✓ cites the output that proves it; each unverified line says so.

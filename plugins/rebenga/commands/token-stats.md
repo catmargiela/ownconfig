@@ -1,23 +1,25 @@
 ---
-description: Bilan de la compression des sorties Bash — commandes compressées, caractères et tokens économisés, processeurs et commandes les plus rentables.
+description: Summary of Bash output compression — commands compressed, characters and tokens saved, most cost-effective processors and commands.
 disable-model-invocation: true
-argument-hint: "[jours, 7 par défaut]"
+argument-hint: "[days, default 7]"
 ---
 
-Résume ce qu'a économisé la compression des sorties Bash sur les `$ARGUMENTS`
-derniers jours (7 si vide). Lecture seule : ne rien modifier, ne rien supprimer.
+Reply to the user in French.
 
-Source : `~/.claude/state/ccx/compress-stats.jsonl`, une ligne JSON par commande
-passée par le wrapper — `ts`, `cmd` (deux premiers mots), `processor` (`node:git`,
-`ts:kubectl`…), `engine` (`node`, `python` ou `none`), `before` et `after`
-(en caractères), `exit`. Aucun contenu de sortie n'y est stocké.
+Summarise what Bash output compression saved over the last `$ARGUMENTS`
+days (7 if empty). Read-only: modify nothing, delete nothing.
 
-Estimation : **tokens ≈ caractères / 4**, toujours étiquetée « est. ».
+Source: `~/.claude/state/ccx/compress-stats.jsonl`, one JSON line per command
+that went through the wrapper — `ts`, `cmd` (first two words), `processor` (`node:git`,
+`ts:kubectl`…), `engine` (`node`, `python` or `none`), `before` and `after`
+(in characters), `exit`. No output content is stored there.
 
-## 1. Mesurer
+Estimate: **tokens ≈ characters / 4**, always labelled « est. ».
 
-Lancer exactement ce script, avec le nombre de jours en argument (le remplacer
-par `7` si `$ARGUMENTS` est vide) :
+## 1. Measure
+
+Run exactly this script, with the number of days as the argument (replace it
+with `7` if `$ARGUMENTS` is empty):
 
 ```bash
 node -e '
@@ -30,10 +32,10 @@ const top=o=>Object.entries(o).sort((x,y)=>y[1].s-x[1].s).slice(0,5).map(([k,v])
 console.log(JSON.stringify({jours:days,commandes:t.n,compressees:t.c,avant:t.b,apres:t.a,economie_pct:t.b?Math.round(100*(1-t.a/t.b)):0,tokens_economises_est:Math.round((t.b-t.a)/4),processeurs:top(by.p),commandes_top:top(by.c)},null,1))' 7
 ```
 
-Fichier absent ou vide : le dire, rappeler que la compression est coupée en
-profil `minimal`, avec `CCX_DISABLED=1` ou `CCX_COMPRESS=off`, et s'arrêter là.
+File missing or empty: say so, remind that compression is off in the
+`minimal` profile, with `CCX_DISABLED=1` or `CCX_COMPRESS=off`, and stop there.
 
-## 2. Rapport
+## 2. Report
 
 ```
 Compression des sorties — 7 derniers jours
@@ -42,12 +44,12 @@ Compression des sorties — 7 derniers jours
 | 214                   | 131         | 1 204 000 → 311 000  | 74 %     | ~223 000                 |
 ```
 
-Puis les deux classements du script (processeurs, commandes), cinq lignes max
-chacun.
+Then the script's two rankings (processors, commands), five lines max
+each.
 
-Une commande enveloppée mais non compressée (`après = avant`) avait une sortie
-trop courte (moins de 2000 caractères) ou un gain inférieur à 20 % : ce n'est pas
-une anomalie. Signaler seulement un processeur dont le gain moyen est proche de
-zéro sur beaucoup d'appels : il coûte un process sans rien rapporter.
+A command wrapped but not compressed (`après = avant`) had output that was
+too short (under 2000 characters) or a gain below 20 %: this is not
+an anomaly. Only flag a processor whose average gain is close to
+zero over many calls: it costs a process without paying anything back.
 
-Terminer par : « Sortie brute d'une commande : la préfixer par `CCX_RAW=1`. »
+End with: « Sortie brute d'une commande : la préfixer par `CCX_RAW=1`. »

@@ -1,67 +1,69 @@
 ---
-description: Capture l'état observable d'un site en production puis le compare après un déploiement — statuts, assets, erreurs console, latence, éléments clés — et rend un verdict PASS/FAIL.
+description: Captures the observable state of a production site, then compares it after a deployment — statuses, assets, console errors, latency, key elements — and returns a PASS/FAIL verdict.
 disable-model-invocation: true
 argument-hint: "<url> [--baseline|--compare|--watch]"
 ---
 
-Surveiller : `$ARGUMENTS` (mode par défaut : `--compare` s'il existe une
-baseline, `--baseline` sinon).
+Reply to the user in French.
 
-`deploy-verify` prouve l'infra, la skill `prod-e2e` prouve les parcours. Ici on
-vérifie ce que voit un visiteur, par comparaison avec l'état d'avant. Sans URL,
-la demander et s'arrêter.
+Watch: `$ARGUMENTS` (default mode: `--compare` if a baseline exists,
+`--baseline` otherwise).
 
-## Règles
+`deploy-verify` proves the infra, the `prod-e2e` skill proves the user flows.
+Here we check what a visitor sees, compared with the previous state. Without a
+URL, ask for it and stop.
 
-- **Lecture seule** : GET et HEAD uniquement. Pas de formulaire, pas de POST,
-  pas de connexion avec un vrai compte.
-- Pas de test de charge : quelques requêtes par endpoint, séquentielles.
-- Identifiants éventuels depuis des variables d'environnement, jamais tapés en
-  ligne de commande ni écrits dans le fichier de baseline.
+## Rules
 
-## Ce qu'on mesure
+- **Read-only**: GET and HEAD only. No form, no POST, no login with a real
+  account.
+- No load testing: a few requests per endpoint, sequential.
+- Any credentials come from environment variables, never typed on the command
+  line nor written to the baseline file.
 
-Les cibles se lisent dans `.claude/canary/<hôte>.json` si la baseline existe,
-sinon se demandent (ou se déduisent de la page, puis se font valider) :
+## What we measure
 
-1. **Page** : statut HTTP, `content-type`, temps total
+Targets are read from `.claude/canary/<hôte>.json` if the baseline exists,
+otherwise asked for (or inferred from the page, then validated):
+
+1. **Page**: HTTP status, `content-type`, total time
    (`curl -sS -o /dev/null -w '%{http_code} %{content_type} %{time_total}\n'`).
-2. **Assets clés** : scripts et CSS hachés, polices, image principale — statut,
-   `content-type`, taille.
-3. **Endpoints** listés : latence médiane sur 3 appels.
-4. **Console** : erreurs au chargement via Playwright s'il est installé dans le
-   projet (`page.on('console')`, `pageerror`). Sinon, le noter « non mesuré ».
-5. **DOM** : présence des sélecteurs clés (`h1`, `nav`, CTA, racine de l'app).
+2. **Key assets**: hashed scripts and CSS, fonts, main image — status,
+   `content-type`, size.
+3. Listed **endpoints**: median latency over 3 calls.
+4. **Console**: load-time errors via Playwright if it is installed in the
+   project (`page.on('console')`, `pageerror`). Otherwise, record it as « non mesuré ».
+5. **DOM**: presence of the key selectors (`h1`, `nav`, CTA, app root).
 
 ## `--baseline`
 
-Capturer tout ce qui précède dans `.claude/canary/<hôte>.json` du projet
-courant : date, commit déployé si connu, valeurs mesurées, cibles. Proposer
-d'ajouter `.claude/canary/` au `.gitignore`. Refaire une baseline seulement sur
-un état jugé sain.
+Capture everything above into `.claude/canary/<hôte>.json` of the current
+project: date, deployed commit if known, measured values, targets. Offer to add
+`.claude/canary/` to `.gitignore`. Only re-baseline on a state deemed
+healthy.
 
 ## `--compare`
 
-Mesurer à nouveau, comparer à la baseline :
+Measure again, compare with the baseline:
 
-| Contrôle | FAIL si |
+| Check | FAIL if |
 |---|---|
-| Page | statut différent de la baseline, ou ≥ 400 |
-| Assets | un 4xx/5xx, ou `content-type` changé (JS servi en `text/html`) |
-| Console | une erreur absente de la baseline |
-| Latence | plus du double de la baseline sur un endpoint |
-| DOM | un élément clé absent |
+| Page | status differs from the baseline, or ≥ 400 |
+| Assets | a 4xx/5xx, or `content-type` changed (JS served as `text/html`) |
+| Console | an error absent from the baseline |
+| Latency | more than double the baseline on an endpoint |
+| DOM | a key element missing |
 
-Une taille d'asset qui change est normale après un déploiement : l'afficher,
-ne pas la compter en échec.
+An asset size change is normal after a deployment: show it, do not count it as
+a failure.
 
 ## `--watch`
 
-Ne pas boucler ici. Proposer `/loop 5m /rebenga:canary-watch <url> --compare`
-pendant la fenêtre à risque, avec arrêt au premier FAIL ou après une heure
-(12 passages). Moins de 2 minutes d'intervalle n'apporte rien.
+Do not loop here. Suggest `/loop 5m /rebenga:canary-watch <url> --compare`
+during the risk window, stopping at the first FAIL or after one hour
+(12 runs). An interval under 2 minutes adds nothing.
 
-## Rapport
+## Report
 
 ```
 Canary : <hôte> — compare vs baseline du <date>
@@ -73,4 +75,4 @@ Canary : <hôte> — compare vs baseline du <date>
 Verdict : FAIL
 ```
 
-Chaque ligne cite la mesure ; ce qui n'a pas été mesuré le dit.
+Each line cites the measurement; anything not measured says so.

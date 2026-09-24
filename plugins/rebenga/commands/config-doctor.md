@@ -1,35 +1,37 @@
 ---
-description: Vérifie que ~/.claude correspond toujours au dépôt de config — liens, hooks enregistrés, settings.json, thème, version du plugin, état git, dispatcher, moteur Python.
+description: Checks that ~/.claude still matches the config repository — links, registered hooks, settings.json, theme, plugin version, git state, dispatcher, Python engine.
 disable-model-invocation: true
 ---
 
-Diagnostic de la configuration Claude Code. Lecture seule : ne rien réparer
-sans que l'utilisateur le demande.
+Reply to the user in French.
 
-## 1. Diagnostiquer
+Claude Code configuration diagnosis. Read-only: fix nothing unless the user
+asks.
 
-Lancer exactement :
+## 1. Diagnose
+
+Run exactly:
 
 ```bash
 node ~/.claude/bin/config-doctor.js
 ```
 
-Si le fichier est absent, le lien lui-même manque : le dire et proposer
-`node ~/.claude-config/install.js`, puis s'arrêter.
+If the file is missing, the link itself is missing: say so and suggest
+`node ~/.claude-config/install.js`, then stop.
 
-## 2. Rendre le résultat
+## 2. Present the result
 
-Recopier les lignes telles quelles dans un bloc de code, puis, pour chaque
-`FAIL` et chaque `WARN`, une ligne : la cause et la commande qui corrige.
+Copy the lines verbatim into a code block, then, for each `FAIL` and each
+`WARN`, one line: the cause and the command that fixes it.
 
-| Contrôle | Correction |
+| Check | Fix |
 |---|---|
-| Liens, Hooks enregistrés | `node ~/.claude-config/install.js` (idempotent, sauvegarde settings.json) |
-| settings.json illisible | restaurer la dernière copie de `~/.claude/backups/settings.json.ccx-*` |
-| Thème | `/theme`, ou recréer le fichier avec la skill `theme-edit` |
-| Plugin rebenga | `claude plugin marketplace update ownconfig && claude plugin update rebenga@ownconfig` |
-| Dépôt | `git -C ~/.claude-config status`, puis pull ou commit selon le cas |
-| Dispatcher | `CCX_DEBUG=1` puis relancer la commande pour voir le module en cause |
-| Moteur token-saver | installer Python ≥ 3.10 (Homebrew) ou définir `CCX_PYTHON` ; sans lui, la compression reste en Node |
+| Links, registered hooks | `node ~/.claude-config/install.js` (idempotent, backs up settings.json) |
+| Unreadable settings.json | restore the latest copy from `~/.claude/backups/settings.json.ccx-*` |
+| Theme | `/theme`, or recreate the file with the `theme-edit` skill |
+| rebenga plugin | `claude plugin marketplace update ownconfig && claude plugin update rebenga@ownconfig` |
+| Repository | `git -C ~/.claude-config status`, then pull or commit as appropriate |
+| Dispatcher | `CCX_DEBUG=1` then re-run the command to see the module at fault |
+| token-saver engine | install Python ≥ 3.10 (Homebrew) or set `CCX_PYTHON`; without it, compression stays in Node |
 
-Ne lancer aucune correction sans accord. Tout est `OK` : le dire en une ligne.
+Run no fix without consent. Everything `OK`: say so in one line.

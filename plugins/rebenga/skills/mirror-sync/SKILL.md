@@ -1,61 +1,63 @@
 ---
 name: mirror-sync
-description: Garder synchronisé un module ou un front dupliqué dans deux dépôts (par exemple une app web et son app de bureau). À utiliser quand un patch doit être « reporté de l'autre côté », quand l'utilisateur parle de miroir, de copie ou de deux fronts à garder alignés.
+description: Keep a module or front end duplicated across two repos in sync (for example a web app and its desktop app). Use when a patch must be « reporté de l'autre côté » ("carried over to the other side"), or when the user talks about a mirror (miroir), a copy or two front ends to keep aligned.
 ---
 
-# Synchroniser un miroir
+# Syncing a mirror
 
-Un front copié dans deux dépôts dérive en silence : chaque patch appliqué à la
-main d'un seul côté crée une divergence que personne n'a décidée. Le but est de
-séparer les différences **voulues** (propres à une plateforme) de la **dérive**.
+Reply to the user in French.
 
-## 1. Trouver la paire
+A front end copied into two repos drifts silently: every patch applied by hand
+on one side only creates a divergence nobody decided. The goal is to separate
+**intended** differences (platform-specific) from **drift**.
 
-- Lire le `CLAUDE.md` de chaque dépôt : chercher une section « miroir » qui donne
-  les deux racines (`<dépôt A>/<chemin>` ↔ `<dépôt B>/<chemin>`) et la liste des
-  divergences voulues.
-- Rien de documenté : demander les deux chemins à l'utilisateur. Ne pas deviner
-  une correspondance à partir de noms de dossiers ressemblants.
+## 1. Find the pair
 
-## 2. Mesurer l'écart
+- Read each repo's `CLAUDE.md`: look for a "miroir" section giving the two
+  roots (`<dépôt A>/<chemin>` ↔ `<dépôt B>/<chemin>`) and the list of intended
+  divergences.
+- Nothing documented: ask the user for both paths. Do not guess a mapping from
+  similar-looking folder names.
 
-- `diff -rq <A> <B>` pour la liste des fichiers différents ou absents d'un côté,
-  puis `git diff --no-index <A>/<f> <B>/<f>` fichier par fichier.
-- Exclure le bruit : `node_modules`, sorties de build, fichiers générés.
-- Classer chaque divergence :
-  - **voulue** — code propre à la plateforme (API native, routage, liens,
-    stockage), ou listée comme telle dans le `CLAUDE.md` ;
-  - **dérive** — un correctif présent d'un seul côté, un fichier en retard ;
-  - **incertaine** — la montrer à l'utilisateur, ne pas trancher seul.
+## 2. Measure the gap
 
-## 3. Reporter un patch
+- `diff -rq <A> <B>` for the list of files that differ or are missing on one
+  side, then `git diff --no-index <A>/<f> <B>/<f>` file by file.
+- Exclude noise: `node_modules`, build output, generated files.
+- Classify each divergence:
+  - **intended** — platform-specific code (native API, routing, links,
+    storage), or listed as such in the `CLAUDE.md`;
+  - **drift** — a fix present on one side only, a file lagging behind;
+  - **uncertain** — show it to the user, do not decide alone.
 
-1. Faire le changement d'un côté, le committer ou le mettre en patch :
-   `git format-patch -1 <sha> --relative=<chemin A>` ou `git diff > x.patch`.
-2. L'appliquer de l'autre côté en remappant le chemin :
-   `git apply --directory=<chemin B> --3way x.patch` (ou `-p<n>` si besoin).
-   `--check` d'abord pour voir ce qui ne s'applique pas.
-3. Un rejet sur un fichier à divergence voulue : reporter l'intention à la main
-   en préservant la partie propre à la plateforme, puis montrer le résultat.
-4. Lancer le typecheck et le build **de chaque dépôt**, avec ses propres scripts
-   (`package.json`, `Cargo.toml`…). Un côté vert ne prouve rien pour l'autre.
-5. Relancer le `diff -rq` : il ne doit rester que les divergences voulues.
+## 3. Carry a patch over
 
-## Interdits
+1. Make the change on one side, commit it or turn it into a patch:
+   `git format-patch -1 <sha> --relative=<chemin A>` or `git diff > x.patch`.
+2. Apply it on the other side, remapping the path:
+   `git apply --directory=<chemin B> --3way x.patch` (or `-p<n>` if needed).
+   `--check` first to see what does not apply.
+3. A reject on a file with an intended divergence: carry the intent over by
+   hand, preserving the platform-specific part, then show the result.
+4. Run the typecheck and the build **of each repo**, with its own scripts
+   (`package.json`, `Cargo.toml`…). One green side proves nothing for the other.
+5. Rerun `diff -rq`: only the intended divergences must remain.
 
-- Écraser un fichier de l'autre côté par copie brute quand il contient une
-  divergence voulue, sans l'accord de l'utilisateur.
-- Aligner une dérive « dans le mauvais sens » sans vérifier quel côté porte le
-  correctif le plus récent (`git log -p` sur le fichier dans chaque dépôt).
-- Annoncer les deux côtés synchronisés sans les deux builds verts.
+## Forbidden
 
-## Pérenniser
+- Overwriting a file on the other side by raw copy when it holds an intended
+  divergence, without the user's approval.
+- Aligning a drift "the wrong way" without checking which side carries the
+  most recent fix (`git log -p` on the file in each repo).
+- Announcing both sides in sync without both builds green.
 
-Proposer d'écrire dans le `CLAUDE.md` du projet une section « miroir » : les deux
-racines, la liste des fichiers à divergence voulue et pourquoi, et la commande
-de diff à relancer. La prochaine session n'aura plus à redécouvrir la paire.
+## Making it last
 
-## Rapport
+Offer to write a "miroir" section in the project's `CLAUDE.md`: the two roots,
+the list of files with intended divergences and why, and the diff command to
+rerun. The next session will not have to rediscover the pair.
 
-Fichiers alignés, divergences voulues conservées, dérives corrigées (avec le
-sens), incertaines en attente, et la sortie des deux builds.
+## Report
+
+Files aligned, intended divergences kept, drifts fixed (with the direction),
+uncertain ones pending, and the output of both builds.
