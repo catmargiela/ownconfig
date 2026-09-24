@@ -10,7 +10,7 @@
  * Contrat : un hook ne casse JAMAIS un appel d'outil. Toute erreur inattendue
  * se termine en sortie 0 (autorisé). Seul un refus délibéré sort en 2.
  *
- *   node dispatch.js <pre-edit|pre-bash|post-edit|pre-compact|stop|session-start>
+ *   node dispatch.js <pre-edit|pre-bash|post-edit|pre-compact|stop|session-start|prompt>
  */
 
 const EVENTS = {
@@ -31,10 +31,13 @@ const EVENTS = {
   // les compagnons, puis le contexte. Les suivants reprennent au Stop d'après.
   'stop': ['./lib/vault#onStop', './lib/stop-quality', './lib/companion-check', './lib/context-monitor'],
   'session-start': ['./lib/vault#onStart'],
+  // Chaque message de l'utilisateur : alerte de quota (limites copiées par la status bar).
+  'prompt': ['./lib/quota-alert'],
 };
 
 /** Nom Claude Code de l'événement, pour le canal d'avertissement JSON. */
-const HOOK_NAMES = { 'pre-edit': 'PreToolUse', 'pre-bash': 'PreToolUse', 'post-edit': 'PostToolUse' };
+const HOOK_NAMES = { 'pre-edit': 'PreToolUse', 'pre-bash': 'PreToolUse', 'post-edit': 'PostToolUse',
+  prompt: 'UserPromptSubmit' };
 
 const event = process.argv[2];
 const modules = EVENTS[event];

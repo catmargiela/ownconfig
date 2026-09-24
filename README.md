@@ -24,9 +24,9 @@ conservés. `settings.json` est sauvegardé à chaque passage dans
 `~/.claude/backups/settings.json.ccx-<horodatage>` ; seules les 3 sauvegardes les
 plus récentes sont gardées, les autres fichiers du dossier ne sont jamais touchés.
 
-Il lie aussi les deux scripts de `bin/` à l'endroit où Claude Code les attend :
-`~/.claude/statusline.sh` et `~/.claude/bin/gh-mcp-headers.sh` (rendus
-exécutables). Chaque `themes/*.json` est lié de la même façon dans
+Il lie aussi les scripts de `bin/` à l'endroit où Claude Code les attend :
+`~/.claude/statusline.sh`, `~/.claude/bin/gh-mcp-headers.sh` et
+`~/.claude/bin/config-doctor.js` (rendus exécutables). Chaque `themes/*.json` est lié de la même façon dans
 `~/.claude/themes/`. Si un vrai fichier différent s'y trouve déjà, il est d'abord copié
 dans `~/.claude/backups/` ; identique, il est remplacé sans bruit. `--uninstall`
 retire ces liens comme les autres.
@@ -40,7 +40,8 @@ retire ces liens comme les autres.
 | `skills/` | 5 workflows déclenchés par leur description : `git-ship`, `verification-loop`, `vault-note`, `project-onboarding`, `theme-edit` |
 | `hooks/` | dispatcher + contrôles + pont Obsidian + moniteur de contexte + rappel des fichiers compagnons + compression des sorties Bash (`hooks/lib/compress/`) |
 | `vendor/token-saver/` | moteur de compression [token-saver](https://github.com/ppgranger/token-saver) (Apache-2.0), `src/` non modifié, appelé par `hooks/lib/compress/ts_adapter.py` ; jamais installé, n'enregistre aucun hook (`NOTICE`) |
-| `bin/statusline.sh` | barre de statut : dossier, branche git, modèle, jauge de contexte, usage `5h N% · 7j N%`, coût |
+| `bin/statusline.sh` | barre de statut : dossier, branche git, modèle, jauge de contexte, usage `5h N% · 7j N%`, coût, caractères économisés par la compression dans la session (`⇣12k`) ; copie les limites d'usage dans `~/.claude/state/ccx/limits.json` pour l'alerte de quota (sa seule écriture) |
+| `bin/config-doctor.js` | diagnostic en lecture seule : `~/.claude` correspond-il au dépôt ? liens, hooks enregistrés une fois chacun, `settings.json`, thème, version installée du plugin, état git (sans réseau), dispatcher qui répond, python pour token-saver. `--json` pour une sortie machine ; sortie 1 sur une erreur. Via `/rebenga:config-doctor` |
 | `bin/gh-mcp-headers.sh` | `headersHelper` du serveur MCP GitHub : lit le jeton de `gh` à chaque connexion, jamais écrit sur disque ; tolère un environnement vide (`HOME` déduit du compte, `gh`/`jq` trouvés par `PATH` puis Homebrew) |
 | `plugins/rebenga/` | plugin local : commandes `rebenga:*`, agents spécialisés, skills TDD et e2e (voir plus bas) |
 | `.claude-plugin/` | marketplace locale `ownconfig` qui publie le plugin |
@@ -90,6 +91,7 @@ qu'un process par contrôle enregistré.
 | `PreCompact` | écrit l'état de la session dans le vault Obsidian |
 | `Stop` | capture vault, puis format + typecheck + `console.log` en un lot, puis rappel des fichiers compagnons (`companion-check`), puis mesure du contexte |
 | `SessionStart` | réinjecte le profil et le contexte projet depuis le vault |
+| `UserPromptSubmit` | alerte de quota (`quota-alert`) : quand la fenêtre 5 h ou 7 j franchit 80 % puis 95 %, un message pour toi et la même note pour le modèle (étapes courtes, pas de sous-agents sans accord), une fois par seuil, par fenêtre et par session. Les limites viennent de la barre de statut (les hooks ne les reçoivent pas) ; une fenêtre déjà réinitialisée est ignorée. Seuils : `CCX_QUOTA_WARN=80,95` ; `CCX_QUOTA_ALERT=off` pour couper |
 
 Deux invariants :
 
@@ -429,7 +431,10 @@ en arrière-plan, une sortie courte ou peu compressible.
 `~/.claude/state/ccx/compress-stats.jsonl` : horodatage, deux premiers mots de la
 commande (`git log`, `go test` — jamais d'argument), moteur (`node`, `python`,
 `none`), processeur (`node:git`, `ts:kubectl`…), tailles avant et après, code de
-sortie. Aucun contenu de sortie. Le fichier est élagué de moitié
+sortie, identifiant de session (transmis par la réécriture, uniquement s'il ne
+contient que `[A-Za-z0-9_-]`). Aucun contenu de sortie. La barre de statut en tire
+les caractères économisés dans la session en cours (`⇣12k`, lu sur les 4 000
+dernières lignes). Le fichier est élagué de moitié
 au-delà de 1 Mo. `/rebenga:token-stats [jours]` en fait le bilan, `/rebenga:token-log [jours] [--toutes]` liste les commandes une par une.
 
 Tests : `node test.js` lance aussi `test-compress.js` — liste blanche (dont
@@ -496,6 +501,7 @@ claude plugin install rebenga@ownconfig
 | `/rebenga:refactor-clean` | code mort, dépendances inutiles, lot par lot, tests verts |
 | `/rebenga:context-budget` | coût estimé du contexte résident, top 3 des économies |
 | `/rebenga:token-stats [jours]` | bilan de la compression des sorties : commandes compressées, tokens économisés (est.), processeurs les plus rentables |
+| `/rebenga:config-doctor` | diagnostic de la config installée (`bin/config-doctor.js`) et la commande qui corrige chaque écart ; ne répare rien sans accord |
 | `/rebenga:token-log [jours] [--toutes]` | liste une par une les commandes compressées (date, commande, processeur, avant → après, gain) ; `--toutes` ajoute celles rendues brutes |
 | `/rebenga:go-review`, `/rebenga:python-review` | revue via l'agent du langage |
 | `/rebenga:migration-check [fichier]` | contrôles statiques, essai `BEGIN…ROLLBACK` (dev par défaut), `sqlc` + `go build`/`go vet` |
@@ -528,7 +534,7 @@ Tout ce qui est propre à un projet (services attendus, URL de santé, paire de
 dépôts miroirs) est lu dans le projet lui-même — son `CLAUDE.md` ou ses scripts —
 jamais écrit dans ce dépôt public.
 
-Les commandes que l'on tape soi-même (`plan`, `token-log`, `token-stats`,
+Les commandes que l'on tape soi-même (`plan`, `token-log`, `token-stats`, `config-doctor`,
 `env-set`, `deploy-verify`, `canary-watch`, `hookify`, `context-budget`,
 `dual-review`, `refactor-clean`) portent `disable-model-invocation: true` : elles
 restent disponibles au clavier, mais leur description n'est plus chargée dans le

@@ -16,6 +16,7 @@
 const path = require('path');
 const { enabled, updateInput } = require('../util');
 const { eligible } = require('./policy');
+const { SESSION_ID, safeSessionId } = require('./session-id');
 
 const WRAP = path.join(__dirname, 'wrap.js');
 
@@ -29,10 +30,12 @@ function shellQuote(s) {
  * leak its tail out of the `# '<original>'` comment as a separate command.
  * Defense in depth: policy.js already refuses control characters.
  */
-function rewrite(command) {
+function rewrite(command, sessionId) {
   if (/[\r\n\x00]/.test(command)) return null;
   const b64 = Buffer.from(command, 'utf8').toString('base64');
-  return `node ${shellQuote(WRAP)} ${b64} # ${shellQuote(command.trim())}`;
+  const id = safeSessionId(sessionId);
+  const sid = id ? ` ${id}` : '';
+  return `node ${shellQuote(WRAP)} ${b64}${sid} # ${shellQuote(command.trim())}`;
 }
 
 function active() {
@@ -48,9 +51,9 @@ function run(input) {
   if (typeof command !== 'string' || ti.run_in_background) return;
   if (/^\s*CCX_RAW=1(\s|$)/.test(command)) return;
   if (!eligible(command).ok) return;
-  const rewritten = rewrite(command);
+  const rewritten = rewrite(command, input.session_id);
   if (!rewritten) return;
   updateInput({ ...ti, command: rewritten });
 }
 
-module.exports = { run, rewrite, WRAP };
+module.exports = { run, rewrite, WRAP, SESSION_ID };

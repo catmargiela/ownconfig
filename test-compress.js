@@ -203,7 +203,8 @@ const pb = (command, env = {}, extra = {}) => {
 const rw = pb('git log');
 const updated = rw.json && rw.json.hookSpecificOutput && rw.json.hookSpecificOutput.updatedInput;
 check('git log : sortie 0', rw.code, 0);
-check('updatedInput.command → wrap.js + base64', /^node '.*wrap\.js' [A-Za-z0-9+/=]+ # 'git log'$/.test(updated && updated.command), true);
+check('updatedInput.command → wrap.js + base64 + session', /^node '.*wrap\.js' [A-Za-z0-9+/=]+ cmp-test # 'git log'$/.test(updated && updated.command), true);
+check('session_id non sûr : jamais recopié dans la commande', rewrite('git log', 'x;rm -rf ~'), rewrite('git log'));
 check('autres champs de tool_input conservés', updated && updated.description, 'd');
 check('aucune décision de permission', /permissionDecision/.test(rw.out), false);
 check('hookEventName PreToolUse', rw.json && rw.json.hookSpecificOutput.hookEventName, 'PreToolUse');

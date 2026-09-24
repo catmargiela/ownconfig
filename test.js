@@ -253,7 +253,7 @@ for (const f of ['statusline.sh', 'gh-mcp-headers.sh']) {
 }
 const ANSI = /\x1b\[[0-9;]*m/g;
 const statusline = (payload) => {
-  const r = spawnSync('bash', [path.join(BIN, 'statusline.sh')], { input: payload, encoding: 'utf8' });
+  const r = spawnSync('bash', [path.join(BIN, 'statusline.sh')], { input: payload, encoding: 'utf8', env: { ...process.env, HOME: TMP } });
   return { code: r.status, out: (r.stdout || '').replace(ANSI, ''), err: r.stderr || '' };
 };
 if (!JQ) console.log('    --   jq absent : tests de la barre de statut et du helper sautés');
@@ -397,4 +397,4 @@ fs.rmSync(TMP, { recursive: true, force: true });
 
 // ---------------------------------------------------------------- résultat, puis suites compression, vault, thèmes
 console.log(`\n  ${pass} réussis, ${fail} échoués sur ${pass + fail}\n`);
-process.exit(fail || ['test-compress.js', 'test-compress-engine.js', 'test-vault.js', 'test-themes.js', 'test-guards.js'].map((f) => spawnSync('node', [path.join(__dirname, f)], { stdio: 'inherit' }).status).some(Boolean) ? 1 : 0);
+process.exit(fail || ['test-compress.js', 'test-compress-engine.js', 'test-vault.js', 'test-themes.js', 'test-guards.js', 'test-status.js'].map((f) => spawnSync('node', [path.join(__dirname, f)], { stdio: 'inherit' }).status).some(Boolean) ? 1 : 0);

@@ -1,10 +1,14 @@
 #!/bin/bash
 # Claude Code statusLine — colored, single line.
 # dir · branch(dirty) · model(effort) · context gauge · 5h + weekly limits · cost · duration · +/- lines
-# Offline, no secrets. Reads the statusLine JSON payload from stdin.
+# · characters saved by output compression in this session
+# Offline, no secrets. Reads the statusLine JSON payload from stdin. Its only
+# write: the usage limits, to state/ccx/limits.json, for the quota-alert hook
+# (hooks only see what the status line is given).
 input=$(cat)
+STATE="$HOME/.claude/state/ccx"
 
-IFS=$'\x1f' read -r dir model effort ctx cost dur added removed rl5 cache rl7 <<< "$(printf '%s' "$input" | jq -r '
+IFS=$'\x1f' read -r dir model effort ctx cost dur added removed rl5 cache rl7 sid rs5 rs7 <<< "$(printf '%s' "$input" | jq -r '
   [(.workspace.current_dir // .cwd // ""),
    (.model.display_name // "" | sub(" *\\(.*\\)$"; "")),
    (.effort.level // ""),
@@ -15,7 +19,10 @@ IFS=$'\x1f' read -r dir model effort ctx cost dur added removed rl5 cache rl7 <<
    (.cost.total_lines_removed // ""),
    (.rate_limits.five_hour.used_percentage // ""),
    (.prompt_cache.hit_ratio // ""),
-   (.rate_limits.seven_day.used_percentage // "")] | map(tostring) | join("\u001f")
+   (.rate_limits.seven_day.used_percentage // ""),
+   (.session_id // ""),
+   (.rate_limits.five_hour.resets_at // ""),
+   (.rate_limits.seven_day.resets_at // "")] | map(tostring) | join("\u001f")
 ')"
 
 # --- palette (ANSI) ---
@@ -95,6 +102,32 @@ fi
 # --- lines changed ---
 if [ -n "$added$removed" ] && [ "${added:-0}${removed:-0}" != "00" ]; then
   out+="${SEP}${GREEN}+${added:-0}${R}${GREY}/${R}${RED}-${removed:-0}${R}"
+fi
+
+# --- output compression: characters saved in this session (stats rows carry the session id) ---
+if [[ "$sid" =~ ^[A-Za-z0-9_-]{1,64}$ ]] && [ -f "$STATE/compress-stats.jsonl" ]; then
+  saved=$(tail -n 4000 "$STATE/compress-stats.jsonl" 2>/dev/null \
+    | jq -Rrn --arg s "$sid" '[inputs | fromjson? | objects | select(.session == $s) | ((.before // 0) - (.after // 0))] | add // 0' 2>/dev/null)
+  if [ "${saved:-0}" -gt 0 ] 2>/dev/null; then
+    saved="$(awk -v n="$saved" 'BEGIN {
+      if (n >= 1e6) printf "%.1fM", n / 1e6; else if (n >= 1e4) printf "%.0fk", n / 1e3
+      else if (n >= 1e3) printf "%.1fk", n / 1e3; else printf "%d", n }')"
+    out+="${SEP}${CYAN}⇣${saved}${R}"
+  fi
+fi
+
+# --- usage limits handed to the quota-alert hook; rewritten only when they change ---
+if [ -n "$rl5$rl7" ]; then
+  limits=$(jq -cn --arg p5 "$rl5" --arg r5 "$rs5" --arg p7 "$rl7" --arg r7 "$rs7" '
+    # resets_at is documented in epoch seconds; milliseconds are converted, anything else dropped.
+    def secs(r): (r | tonumber? // null) | if . == null then null elif . > 1e11 then (. / 1000 | floor) else . end;
+    def w(p; r): if p == "" then null else {pct: (p | tonumber), resets_at: secs(r)} end;
+    {five_hour: w($p5; $r5), seven_day: w($p7; $r7)}' 2>/dev/null)
+  if [ -n "$limits" ] && [ "$limits" != "$(cat "$STATE/limits.json" 2>/dev/null)" ]; then
+    # Unpredictable temp name (mktemp, O_EXCL): a pre-planted symlink is never followed.
+    mkdir -p "$STATE" 2>/dev/null && tmp=$(mktemp "$STATE/limits.json.XXXXXX" 2>/dev/null) \
+      && { printf '%s' "$limits" > "$tmp" && mv -f "$tmp" "$STATE/limits.json" || rm -f "$tmp"; } 2>/dev/null
+  fi
 fi
 
 # --- prompt cache hit ratio (warn only when poor) ---
