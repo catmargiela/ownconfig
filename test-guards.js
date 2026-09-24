@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 /**
- * Tests des gardes no-artifact-files, dev-server-guard et commit-gate.
+ * Tests des gardes dev-server-guard et commit-gate.
  * Lancé par `node test.js` ; utilisable seul : `node test-guards.js`.
  *
  * Tout tourne dans un HOME, un vault et des dépôts git temporaires : rien n'est
@@ -51,37 +51,8 @@ function stage(dir, files) {
   git(dir, 'add', '--', ...Object.keys(files));
 }
 
-// ---------------------------------------------------------------- no-artifact-files
-group('no-artifact-files : fichiers de travail');
 const proj = repo('proj');
 let sid = 0;
-const write = (file, s, env) => hook('pre-edit',
-  { session_id: s, cwd: proj, tool_name: 'Write', tool_input: { file_path: file, content: 'x\n' } }, env);
-const S1 = `grd-art-${++sid}`;
-const first = write(path.join(proj, 'NOTES.md'), S1);
-check('NOTES.md neuf : refusé (exit 2)', first.code, 2);
-check('message en français, relance indiquée', /relancer la même écriture/.test(first.err), true);
-check('NOTES.md : 2e tentative autorisée', write(path.join(proj, 'NOTES.md'), S1).code, 0);
-check('docs/NOTES.md autorisé', write(path.join(proj, 'docs', 'NOTES.md'), S1).code, 0);
-check('.github/report.md autorisé', write(path.join(proj, '.github', 'report.md'), S1).code, 0);
-check('dans le vault autorisé', write(path.join(VAULT, 'Claude', 'notes.md'), S1).code, 0);
-fs.writeFileSync(path.join(proj, 'summary.md'), 'déjà là\n');
-check('fichier existant (édition) autorisé', hook('pre-edit', { session_id: S1, cwd: proj, tool_name: 'Edit',
-  tool_input: { file_path: path.join(proj, 'summary.md'), old_string: 'déjà', new_string: 'encore' } }).code, 0);
-check('rapport-final.md refusé une fois', [write(path.join(proj, 'rapport-final.md'), S1).code,
-  write(path.join(proj, 'rapport-final.md'), S1).code], [2, 0]);
-check('résumé.txt refusé', write(path.join(proj, 'résumé.txt'), S1).code, 2);
-check('src/report.ts autorisé (ni md ni txt)', write(path.join(proj, 'src', 'report.ts'), S1).code, 0);
-check('README.md autorisé', write(path.join(proj, 'README.md'), S1).code, 0);
-check('chemin relatif résolu depuis cwd', write('plan.md', S1).code, 2);
-check('profil minimal : autorisé', write(path.join(proj, 'todo.md'), `grd-art-${++sid}`, { CC_PROFILE: 'minimal' }).code, 0);
-check('CCX_DISABLED : autorisé', write(path.join(proj, 'todo.md'), `grd-art-${++sid}`, { CCX_DISABLED: '1' }).code, 0);
-const strictS = `grd-art-${++sid}`;
-const strict1 = write(path.join(proj, 'wip.md'), strictS, { CC_PROFILE: 'strict' });
-const strict2 = write(path.join(proj, 'wip.md'), strictS, { CC_PROFILE: 'strict' });
-const strict3 = write(path.join(proj, 'wip.md'), strictS, { CC_PROFILE: 'strict' });
-check('strict : artefact, puis fact-forcing, puis passage', [strict1.code, /Fichier de travail/.test(strict1.err),
-  strict2.code, /Fact-Forcing/.test(strict2.err), strict3.code], [2, true, 2, true, 0]);
 
 // ---------------------------------------------------------------- dev-server-guard
 group('dev-server-guard : serveurs au premier plan');

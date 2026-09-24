@@ -16,8 +16,7 @@
 const EVENTS = {
   // Refus sur le contenu d'abord : un secret ou une migration cassée se refuse
   // avant que le fact-forcing ne consomme son unique passage.
-  // no-artifact-files consomme son passage unique avant celui du fact-forcing.
-  'pre-edit': ['./lib/secret-guard', './lib/migration-guard', './lib/no-artifact-files', './lib/pre-edit'],
+  'pre-edit': ['./lib/secret-guard', './lib/migration-guard', './lib/pre-edit'],
   // Refus d'abord (serveur au premier plan, commit non conforme). L'hygiène ne
   // fait qu'avertir. La compression passe en DERNIER : un refus (`deny`) termine
   // le process en sortie 2 avant elle, donc une commande refusée n'est jamais
