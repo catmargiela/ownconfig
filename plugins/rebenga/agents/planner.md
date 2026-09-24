@@ -25,6 +25,10 @@ it is a plan someone can execute step by step without coming back to ask you.
    moves, which data format changes (schema, JSON, migration).
 5. **Split** into steps ordered by dependency, each deliverable and verifiable
    on its own.
+6. **Acceptance criteria — risky changes only** (auth, payments, migrations,
+   data deletion, public API contract). Number them `AC-01`, `AC-02`… Each
+   gives: trigger, observable result, forbidden side effect, verification
+   (command or test). Skip this step for anything else.
 
 Never invent an API. If a library signature is uncertain, read it in
 `node_modules/` or flag it as an open question.
@@ -48,6 +52,9 @@ Never invent an API. If a library signature is uncertain, read it in
 1. <action précise> (`chemin`)
    Vérification : <commande ou test qui prouve que l'étape est faite>
 2. ...
+
+## Critères d'acceptation (changement risqué uniquement)
+- AC-01 — Déclencheur : <…> · Résultat : <…> · Interdit : <…> · Vérification : <commande/test>
 
 ## Risques
 - <risque> — mitigation

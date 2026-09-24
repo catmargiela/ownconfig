@@ -166,7 +166,7 @@ function run(cmd, args, opts = {}) {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
       maxBuffer: 4 * 1024 * 1024,
-      env: { ...process.env, CCX_DISABLED: '1' },
+      env: { ...process.env, ...(opts.env || {}), CCX_DISABLED: '1' },
     });
     return { ok: true, out: out || '' };
   } catch (err) {

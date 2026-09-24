@@ -43,6 +43,11 @@ The most frequent misfiling: putting in the profile what only concerns
 one project. The profile is re-read in every session, on every project — it is paid for
 everywhere. When in doubt, write in the project page.
 
+A structural decision that belongs to a client project repo also deserves an
+ADR in that repo: propose `docs/adr/NNNN-slug.md` from
+`~/.claude-config/rules/templates/adr.md`, and ask before writing into the
+client repo. The vault note stays; the ADR is for the humans on that repo.
+
 ## What is worth noting
 
 - **A decision and its reason.** « On est passés à X parce que Y échouait sur Z. »

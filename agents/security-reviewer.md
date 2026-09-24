@@ -28,6 +28,29 @@ Write your final report in French.
 For onchain code, add: reentrancy, `msg.sender` checks, unbounded
 arithmetic, dependency on a single oracle, unlimited token approvals.
 
+## Next.js / React
+
+- **Server Actions** (`"use server"`) are public POST endpoints: each one
+  parses its input with a schema, authenticates, and authorizes the caller
+  on the specific record — a route gate or hidden button protects nothing.
+- **Client bundle**: no secret in `NEXT_PUBLIC_*` (or `VITE_*`), and no
+  server-only module imported from a `"use client"` file.
+- **User-supplied URLs** in `href`, `src`, `redirect()` or `router.push`:
+  scheme allowlisted (`http:`, `https:`, `mailto:`) — `javascript:` and
+  `data:` execute code; React does not block them at runtime.
+- **Redirects and route handlers**: `next`/`returnTo`/callback params
+  restricted to same-origin paths (open redirect); `params`, `searchParams`
+  and body validated; mutating handlers check `Origin` or a CSRF token when
+  auth is cookie-based.
+- `target="_blank"` carries `rel="noopener noreferrer"`.
+- `dangerouslySetInnerHTML` only with a sanitizer (DOMPurify, tag allowlist)
+  applied at the call site, or with content fully under our control.
+- **Source maps**: `productionBrowserSourceMaps` off, or maps uploaded to the
+  error tracker and not served publicly.
+- **Headers**: CSP (nonce-based `script-src`, no `unsafe-eval`,
+  `frame-ancestors`), HSTS, `X-Content-Type-Options`, `Referrer-Policy` set
+  in `next.config` `headers()` or the middleware.
+
 ## Discipline
 
 - A finding without a nameable exploitation path is not a finding: name who

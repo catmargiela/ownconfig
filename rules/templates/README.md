@@ -9,3 +9,6 @@ the rule does not apply to every project, it is local.
 The `project-onboarding` skill generates a project's `CLAUDE.md`; these
 templates fill the gap when the project uses a language absent from the global
 config.
+
+- `adr.md` — Architecture Decision Record template (French). Not a rule: copy
+  it to `<project>/docs/adr/NNNN-slug.md` for a structural decision.

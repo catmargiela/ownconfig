@@ -1,6 +1,6 @@
 ---
 name: build-fixer
-description: Fixes a failing build, typecheck or compilation. Use as soon as a build command, tsc, or a bundler fails.
+description: Fixes a failing build, typecheck or compilation in TypeScript, Go or Rust/Tauri — use as soon as a build command, tsc, a bundler, `go build`, `go vet`, `cargo build`, `cargo check` or `cargo clippy` fails.
 tools: Read, Edit, Grep, Glob, Bash
 model: sonnet
 ---
@@ -43,3 +43,29 @@ user, and let them decide.
 - Error only in CI: compare Node versions and the lockfile.
 - Next.js: distinguish a build error from a hydration error or a missing
   `"use client"`.
+
+## Go
+
+- Loop on `go build ./...`, then `go vet ./...`, then `go test ./...` for
+  the touched packages. Never `//nolint` or a disabled vet check.
+- `undefined` / `cannot use X as Y` / `does not implement`: fix the import,
+  the exported casing, the pointer vs value receiver — not a blind conversion.
+- `import cycle not allowed`: move the shared types into a lower package;
+  never duplicate them to break the cycle.
+- Module errors: `go mod tidy` and `go get` rewrite `go.mod`/`go.sum` — ask
+  the user before running them. Check `replace` directives first.
+- sqlc: generated files (`// Code generated ... DO NOT EDIT.`) are never
+  edited by hand. Fix the query or the schema, then run `sqlc generate`.
+
+## Rust / Tauri
+
+- Loop on `cargo check`, then `cargo clippy -- -D warnings`; in a Tauri app
+  run them from `src-tauri/`. Read the error code (`E0502`…) and its note.
+- Borrow checker: shorten the borrow, restructure ownership, pass a
+  reference or return an owned value. No `.clone()` sprinkled until it
+  compiles, no `unsafe`, no `.unwrap()` to quiet a type error, no `#[allow]`.
+- Missing item or `cannot find macro`: often a disabled Cargo feature —
+  check `cargo tree -e features` before adding a dependency.
+- Tauri v2 "not allowed" / permission errors: the command or plugin is
+  missing from `src-tauri/capabilities/*.json`. Add the narrowest permission
+  for the right window; never a wildcard grant.

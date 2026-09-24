@@ -105,7 +105,30 @@ const RAW_DESTRUCTIVE = [
 /** Commandes dont l'argument est du texte, pas du code à exécuter. */
 const TEXT_CONTEXT = /^\s*(git\s+commit|git\s+tag|echo|printf|gh\s+(pr|issue)\s+(create|comment)|cat\s*<<)/;
 
+const NO_VERIFY_MSG = [
+  '[Bloqué] Contournement des hooks git (`--no-verify`, `HUSKY=0`, `core.hooksPath`).',
+  '',
+  "Ces hooks sont la dernière barrière avant que du code cassé n'entre dans",
+  "l'historique. S'ils échouent, corriger ce qu'ils signalent.",
+  '',
+  "Si le hook lui-même est en cause, le dire à l'utilisateur et lui laisser la décision.",
+].join('\n');
+
+/**
+ * Hook bypasses beyond `commit --no-verify`: the same flag on push, merge,
+ * rebase, pull, am, cherry-pick, revert (`-n` stays commit-only: it means
+ * dry-run for push); husky switched off; hooks redirected through
+ * `core.hooksPath` (config keys are case-insensitive), inline or persisted.
+ */
+const HOOK_BYPASS = [
+  /\bgit\s+(push|merge|rebase|pull|am|cherry-pick|revert)\b[^|;&]*\s--no-verify\b/,
+  /(^|[;&|]\s*|\s)HUSKY=0\s+(\S+\s+)*git\s/,
+  /\bgit\b[^|;&]*\s-c\s*['"]?core\.hookspath\s*=/i,
+  /\bgit\s+config\b[^|;&]*\score\.hookspath\s+\S/i,
+];
+
 const HARD_DENY = [
+  ...HOOK_BYPASS.map((re) => ({ re, msg: NO_VERIFY_MSG })),
   {
     re: /\bgit\s+commit\b[^|;&]*\s(--no-verify|-n)\b/,
     msg: [
@@ -159,6 +182,10 @@ function run(input) {
 
   if (enabled(['minimal', 'standard', 'strict'])) {
     for (const rule of HARD_DENY) if (rule.re.test(cmd)) deny(rule.msg);
+    // A fully quoted `-c "core.hooksPath=…"` vanishes from the stripped command:
+    // check the raw one too, outside text arguments (commit messages, echo).
+    const bare = stripHeredocs(raw);
+    if (!TEXT_CONTEXT.test(bare) && HOOK_BYPASS.slice(2).some((re) => re.test(bare))) deny(NO_VERIFY_MSG);
   }
 
   if (!enabled(['standard', 'strict'])) return;
@@ -181,4 +208,4 @@ function run(input) {
   deny(destructiveMsg(hit.what));
 }
 
-module.exports = { run, stripQuoted, stripHeredocs, DESTRUCTIVE, RAW_DESTRUCTIVE, TEXT_CONTEXT, HARD_DENY };
+module.exports = { run, stripQuoted, stripHeredocs, DESTRUCTIVE, RAW_DESTRUCTIVE, TEXT_CONTEXT, HARD_DENY, HOOK_BYPASS };

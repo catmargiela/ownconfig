@@ -26,11 +26,19 @@ Write your final report in French.
 
 - Client/server boundary: `"use client"` placed too high, which moves a whole
   subtree to the client.
-- Server secret reachable from the client (`NEXT_PUBLIC_*`, or importing a
-  server module into a client component).
-- Server action without an authorization check — it is a public endpoint.
 - Cache and revalidation: stale data, or a global cache opt-out for convenience.
 - Raw `<img>` where `next/image` is called for; font loaded without `next/font`.
+
+## Security (quick pass — depth belongs to `security-reviewer`)
+
+- Server Action without input schema or authorization — it is a public endpoint.
+- Secret in `NEXT_PUBLIC_*`, or a server module imported into a client component.
+- User URL in `href`/`src`/redirect without a scheme check (`javascript:`, `data:`).
+- `target="_blank"` without `rel="noopener noreferrer"`; unsanitized
+  `dangerouslySetInnerHTML`; public production source maps; no CSP headers.
+
+On auth, payment or upload code, recommend `security-reviewer` instead of
+auditing it here.
 
 ## TypeScript
 
@@ -39,10 +47,22 @@ Write your final report in French.
   optimism, without a schema.
 - Non-exhaustive union in a `switch`, without a `never` guard.
 
-## Accessibility and rendering
+## Accessibility (WCAG 2.2 AA) and rendering
 
-- Clickable element not keyboard-focusable (`div` with `onClick`).
-- Image without `alt`, field without an associated `label`, insufficient contrast.
+- Input, select, textarea without a connected `<label>` (placeholder is not
+  one); error not linked via `aria-describedby` + `aria-invalid`.
+- Icon-only button or link without an accessible name (`aria-label`).
+- Modal: focus not moved in, not trapped, `Escape` inert, or not restored
+  to the trigger on close.
+- Custom widget (`div` with `onClick`, menu, tabs, combobox) not focusable
+  or not operable with Enter/Space/arrows — prefer the native element.
+- Focus invisible: `outline-none` without a `focus-visible:` replacement.
+- Async status, toast or form error not announced (`aria-live`, `role="status"`).
+- Contrast below 4.5:1 for text, 3:1 for large text and UI components.
+- `prefers-reduced-motion` ignored, including GSAP (`gsap.matchMedia()`) and
+  framer-motion (`useReducedMotion`, `MotionConfig`) animations.
+- Meaning conveyed by color only (error shown as a red border alone).
+- `alt` missing or meaningless; decorative images get `alt=""`.
 - Layout shift: image or container without reserved dimensions.
 
 ## Tailwind

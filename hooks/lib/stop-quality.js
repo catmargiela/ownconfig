@@ -2,7 +2,8 @@
 /**
  * Stop — gate qualité batché sur les fichiers édités pendant la réponse.
  *
- * Formatage : silencieux, appliqué. Typecheck : bloquant tant que le budget de
+ * Formatage (Biome/Prettier, gofmt, rustfmt) : silencieux, appliqué.
+ * Typecheck et go vet : bloquants tant que le budget de
  * relances n'est pas épuisé, pour que l'erreur revienne à l'agent plutôt que
  * d'atterrir dans un commit. console.log : signalé, jamais bloquant.
  */
@@ -10,6 +11,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { enabled, readState, writeState, findUp, run: exec, tilde } = require('./util');
+const { formatGo, vetGo, formatRust } = require('./stop-lang');
 
 const JS_TS = /\.(m|c)?[jt]sx?$/;
 const TS = /\.(m|c)?tsx?$/;
@@ -77,15 +79,22 @@ function run(input) {
     }
   }
 
+  formatGo(edited);
+  formatRust(edited);
+
   const notes = [];
 
-  // 2. Typecheck — une seule passe par projet, seulement si du TS a bougé.
+  // 2. Typecheck — une seule passe par projet, seulement si du TS a bougé ;
+  //    go vet sur les paquets Go touchés.
   let errors = [];
-  if (process.env.CCX_NO_TYPECHECK !== '1' && edited.some((f) => TS.test(f))) {
-    for (const root of roots) {
-      const errs = typecheck(root);
-      if (errs) errors.push(...errs.slice(0, 15));
+  if (process.env.CCX_NO_TYPECHECK !== '1') {
+    if (edited.some((f) => TS.test(f))) {
+      for (const root of roots) {
+        const errs = typecheck(root);
+        if (errs) errors.push(...errs.slice(0, 15));
+      }
     }
+    errors.push(...vetGo(edited));
   }
 
   // 3. console.log — signalé, jamais bloquant.
@@ -113,13 +122,13 @@ function run(input) {
 
   process.stderr.write(
     [
-      '[Gate qualité] Le typecheck échoue sur les fichiers modifiés dans cette réponse.',
+      '[Gate qualité] Le typecheck ou `go vet` échoue sur les fichiers modifiés dans cette réponse.',
       '',
       ...errors,
       '',
       ...(notes.length ? notes.concat('') : []),
-      'Corriger ces erreurs avant de conclure. Ne pas assouplir tsconfig.json et ne pas',
-      "ajouter d'`any` : corriger le type à la source.",
+      'Corriger ces erreurs avant de conclure. Ne pas assouplir tsconfig.json, ne pas',
+      "ajouter d'`any` ni de `//nolint` : corriger à la source.",
     ].join('\n') + '\n'
   );
   process.exit(2);
