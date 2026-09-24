@@ -12,6 +12,9 @@
  * to an existing executable file), then /opt/homebrew/bin/python3,
  * /usr/local/bin/python3, /usr/bin/python3. A candidate the adapter rejects as
  * too old (< 3.10, e.g. macOS /usr/bin/python3 3.9) passes to the next one.
+ * CCX_PYTHON comes from Claude Code's own environment: whatever sets it (a
+ * direnv .envrc loaded before launch) could already change the hooks' PATH,
+ * so it is trusted at that level and documented as "set it in your profile".
  * It runs isolated (`-I -B`), from `/`, with PATH fixed to the system
  * directories and a HOME that does not exist: no user config, no user
  * processors, no bytecode, nothing written. 5 s timeout, 8 MB input cap.

@@ -159,14 +159,19 @@ const REVIEW = {
       'yq env f.yaml', "yq 'strenv(A)' f.yaml", "yq '$ENV.A' f.yaml", 'yq .a'],
   },
   // maven / gradle: code or configuration from outside the project
-  'mvn / gradle : extensions, settings, init scripts refusés': {
-    ok: ['mvn test', 'mvn clean verify -DskipITs', './gradlew :app:test', 'gradle build --offline'],
+  'mvn / gradle : extensions, settings, init scripts, propriétés JVM refusés': {
+    ok: ['mvn test', 'mvn clean verify -DskipITs', './gradlew :app:test', 'gradle build --offline',
+      'mvn test -DskipTests', 'mvn test -DskipTests=true', 'mvn test -Dtest=FooTest#bar', 'mvn -Pci verify'],
     refused: ['mvn -Dmaven.ext.class.path=x.jar test', 'mvn -D maven.ext.class.path=x.jar test',
       'mvn test -Dmaven.ext.class.path=/tmp/x.jar', 'mvn -s s.xml test', 'mvn --settings=s.xml test', 'mvn -ss.xml test',
       'mvn -gs g.xml test', 'mvn --global-settings g.xml test', 'mvn -t t.xml test', 'mvn --toolchains=t.xml test',
       'gradle --init-script i.gradle build', 'gradle --init-script=i.gradle build', 'gradle -I i.gradle build',
       './gradlew -Ii.gradle test', 'gradle -c s.gradle build', 'gradle --settings-file s.gradle build',
-      'gradle -g /tmp/h build', 'gradle --gradle-user-home=/tmp/h build', './gradlew -g/tmp/h test'],
+      'gradle -g /tmp/h build', 'gradle --gradle-user-home=/tmp/h build', './gradlew -g/tmp/h test',
+      'gradle build -Dorg.gradle.jvmargs=-javaagent:/tmp/evil.jar', 'gradle -Dorg.gradle.jvmargs=x build',
+      './gradlew test -Pfoo=bar', 'gradle build --system-prop=a=b', 'gradle build --project-prop a=b',
+      'mvn test -Duser.home=/tmp/evil', 'mvn test -D user.home=/tmp/evil', 'mvn test --define=user.home=/tmp/evil',
+      'mvn test -DargLine=-javaagent:/tmp/evil.jar', 'mvn test -Dtest=$(id)', 'mvn -P ci verify'],
   },
   // docker: never another daemon
   'docker : autre démon refusé': {

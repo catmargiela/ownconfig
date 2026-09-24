@@ -157,6 +157,20 @@ const GRADLE_REFUSED = ['--continuous', '-t', '--scan', '--write-locks', '--writ
 /** Short options with an attached value: `-Iinit.gradle`, `-sfile.xml`. */
 const GRADLE_ATTACHED = /^-[Icg].+/;
 const MVN_ATTACHED = /^-(s|gs|t)[^-].*/;
+/**
+ * System and project properties reach the JVM itself: `-Duser.home`,
+ * `-Dorg.gradle.jvmargs=-javaagent:…` load code from anywhere. Maven keeps a
+ * short list of test switches and pom profiles; Gradle keeps none.
+ */
+const MVN_PROPS = /^-D(skipTests|skipITs|maven\.test\.skip|failIfNoTests|surefire\.failIfNoSpecifiedTests)(=(true|false))?$|^-D(test|it\.test)=[\w.#*,+-]+$/;
+const MVN_PROFILE = /^-P[\w.,!-]+$/;
+const JVM_PROP_FLAGS = ['-D', '--define', '-P', '--activate-profiles', '--system-prop', '--project-prop'];
+
+/** A property or profile option outside what the rule allows. */
+function foreignProps(rest, allowed) {
+  return hasOpt(rest, ...JVM_PROP_FLAGS)
+    || rest.some((a) => /^-[DP]/.test(a) && !allowed.some((re) => re.test(a)));
+}
 
 /** Every positional must be a build/test goal: no deploy, install, publish, run, exec… */
 function goalsAllowed(rest, allowed, strip) {
@@ -167,12 +181,14 @@ function goalsAllowed(rest, allowed, strip) {
 function mvnRule(words) {
   const rest = words.slice(1);
   if (hasOpt(rest, ...MVN_REFUSED) || rest.some((a) => MVN_EXT.test(a) || MVN_ATTACHED.test(a))) return null;
+  if (foreignProps(rest, [MVN_PROPS, MVN_PROFILE])) return null;
   return goalsAllowed(rest, MVN_GOALS, (g) => g) ? 'generic' : null;
 }
 
 function gradleRule(words) {
   const rest = words.slice(1);
   if (hasOpt(rest, ...GRADLE_REFUSED) || rest.some((a) => GRADLE_ATTACHED.test(a))) return null;
+  if (foreignProps(rest, [])) return null;
   return goalsAllowed(rest, GRADLE_TASKS, (g) => g.split(':').pop()) ? 'generic' : null;
 }
 

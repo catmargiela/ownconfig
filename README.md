@@ -297,6 +297,10 @@ s'exécuterait sans demande de permission) : `CCX_PYTHON` s'il désigne par un
 chemin absolu un fichier exécutable, puis `/opt/homebrew/bin/python3`,
 `/usr/local/bin/python3`, `/usr/bin/python3`. Un candidat trop ancien (le
 `/usr/bin/python3` 3.9 de macOS) passe au suivant ; aucun candidat → repli Node.
+Limite : `CCX_PYTHON` est lu dans l'environnement de Claude Code. Un `.envrc`
+chargé avant son lancement peut donc y mettre un interpréteur quelconque, comme
+il pourrait déjà modifier le `PATH` des hooks. Ne le définir que dans son propre
+profil shell.
 
 **Modèle de sécurité.**
 
@@ -405,7 +409,7 @@ d'écriture, interactive ou suivie est refusée :
 | ansible-playbook | avec `--check`/`-C`, `--syntax-check`, `--list-*` | sans mode vérification ; `--ask-pass`, `--ask-become-pass`, `--step` |
 | npm, pnpm, yarn, bun | `npm ci`, `pnpm install --frozen-lockfile`, `bun install --frozen-lockfile`, `yarn install --immutable` (sans paquet) ; `ls`/`list`, `outdated`, `audit`, `bun pm ls` | `install`/`i`/`add` d'un paquet ou sans verrou figé (scripts de cycle de vie de code nouveau), `-g`/`--global`, `audit fix` |
 | pip, poetry, uv | `pip list/freeze/check`, `poetry show`, `uv pip list/freeze` | `install`, `uninstall` |
-| mvn, gradle | `./mvnw`, `./gradlew` ; buts `clean compile test package verify`, tâches `clean build test check assemble compile*` | `install`, `deploy`, `publish`, `exec:*`, `bootRun`, `--continuous`, `--scan` ; code ou config hors projet : `-Dmaven.ext.class.path`, `-s`/`--settings`, `-gs`, `-t`/`--toolchains`, `--init-script`/`-I`, `-c`/`--settings-file`, `-g`/`--gradle-user-home` |
+| mvn, gradle | `./mvnw`, `./gradlew` ; buts `clean compile test package verify`, tâches `clean build test check assemble compile*` | `install`, `deploy`, `publish`, `exec:*`, `bootRun`, `--continuous`, `--scan` ; code ou config hors projet : `-Dmaven.ext.class.path`, `-s`/`--settings`, `-gs`, `-t`/`--toolchains`, `--init-script`/`-I`, `-c`/`--settings-file`, `-g`/`--gradle-user-home` ; propriétés JVM : tout `-D`/`-P` sauf, pour Maven, `-DskipTests`, `-DskipITs`, `-Dmaven.test.skip`, `-Dtest=…` et les profils `-Pnom` (Gradle : aucun) |
 | cargo | `cargo fmt --check` | `cargo fmt` |
 | just, mise, nix | `just --list`/`--summary`, `mise ls`, `nix flake show/check` | une recette `just`, `mise install/use`, `nix run`, `flake update`, `--commit-lock-file`, `--option` |
 | jq, yq | un filtre et au moins un fichier | `-i`/`--inplace`/`--in-place`, yq `-s`/`--split-exp`/`--split-exp-file` (écrivent des fichiers), `-n`, sans fichier, lecture de l'environnement (`env`, `$ENV`, `strenv`) |
