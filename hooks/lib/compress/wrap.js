@@ -3,7 +3,7 @@
 /**
  * Output-compression wrapper.
  *
- *   node wrap.js <base64 command>
+ *   node wrap.js <base64 command> [session id]
  *
  * Runs the command in the user's shell, stdin inherited, stdout and stderr
  * captured SEPARATELY, and prints each one condensed on its own stream. The
@@ -24,10 +24,13 @@ const { spawn } = require('child_process');
 const { eligible, parse } = require('./policy');
 const { bestResult } = require('./select');
 const stats = require('./stats');
+const { safeSessionId } = require('./session-id');
 
 const MIN_CHARS = 2000;
 const MAX_CAPTURE = 8 * 1024 * 1024;
 const SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
+/** Session id from the rewrite, kept only in the statistics (per-session savings in the status line). */
+const SESSION = safeSessionId(process.argv[3]);
 
 function shell() {
   const s = process.env.SHELL;
@@ -96,7 +99,8 @@ function finish(cmd, processor, bufs, exitCode) {
   }
   if (result) {
     stats.record({ ts: new Date().toISOString(), cmd: stats.label(parse(cmd)), processor: result.processor,
-      engine: result.engine, before: result.before, after: result.after, exit: exitCode });
+      engine: result.engine, before: result.before, after: result.after, exit: exitCode,
+      ...(SESSION ? { session: SESSION } : {}) });
   }
   process.exitCode = exitCode;
 }

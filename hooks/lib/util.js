@@ -76,7 +76,7 @@ function updateInput(patch) {
 /**
  * Emit buffered warnings and any input rewrite as ONE hook JSON on stdout:
  * `systemMessage` for the user, `additionalContext` for the model
- * (PreToolUse / PostToolUse only), `updatedInput` (PreToolUse only).
+ * (PreToolUse / PostToolUse / UserPromptSubmit), `updatedInput` (PreToolUse only).
  * No `permissionDecision` key, ever.
  */
 function flushOutput(hookEventName) {
@@ -85,7 +85,7 @@ function flushOutput(hookEventName) {
   const text = warnings.join('\n\n');
   const out = {};
   if (text) out.systemMessage = text;
-  if (hookEventName === 'PreToolUse' || hookEventName === 'PostToolUse') {
+  if (['PreToolUse', 'PostToolUse', 'UserPromptSubmit'].includes(hookEventName)) {
     const specific = { hookEventName };
     if (text) specific.additionalContext = text;
     if (rewrite) specific.updatedInput = rewrite;

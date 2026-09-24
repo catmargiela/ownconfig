@@ -40,12 +40,14 @@ const HOOK_ENTRIES = [
   // fait rater la ré-injection juste après une compaction — le moment précis où
   // le contexte vient d'être perdu.
   { event: 'SessionStart', matcher: 'startup|resume|clear|compact|fork', arg: 'session-start', timeout: 10 },
+  { event: 'UserPromptSubmit', matcher: undefined, arg: 'prompt', timeout: 5 },
 ];
 
 /** Scripts de la machine versionnés dans `bin/`, liés à leur emplacement attendu. */
 const SCRIPTS = [
   ['statusline.sh', path.join(CLAUDE, 'statusline.sh')],
   ['gh-mcp-headers.sh', path.join(CLAUDE, 'bin', 'gh-mcp-headers.sh')],
+  ['config-doctor.js', path.join(CLAUDE, 'bin', 'config-doctor.js')],
 ];
 
 /** Lien symbolique : la source de vérité reste le dépôt, les édits sont immédiats. */
@@ -140,7 +142,8 @@ function stripOwn(settings) {
   return removed;
 }
 
-function installFiles() {
+/** Fichiers et dossiers du dépôt liés tels quels dans `~/.claude` (hors scripts et thèmes). */
+function fileLinks() {
   const targets = [
     [path.join(SRC, 'CLAUDE.md'), path.join(CLAUDE, 'CLAUDE.md')],
     [path.join(SRC, 'hooks'), HOOKS_DEST],
@@ -151,7 +154,16 @@ function installFiles() {
   for (const name of fs.readdirSync(path.join(SRC, 'skills'))) {
     targets.push([path.join(SRC, 'skills', name), path.join(CLAUDE, 'skills', name)]);
   }
+  return targets;
+}
 
+/** Tout ce que l'installeur lie, en [source, destination] : ce que config-doctor vérifie. */
+function expectedLinks() {
+  return [...fileLinks(), ...SCRIPTS.map(([n, d]) => [path.join(SRC, 'bin', n), d]), ...themeLinks()];
+}
+
+function installFiles() {
+  const targets = fileLinks();
   const themes = themeLinks();
   if (UNINSTALL) {
     targets.forEach(([, d]) => unlink(d));
@@ -230,4 +242,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { pruneBackups, stripOwn };
+module.exports = { pruneBackups, stripOwn, expectedLinks, HOOK_ENTRIES, MARKER, HOOKS_DEST, SETTINGS, SRC };
