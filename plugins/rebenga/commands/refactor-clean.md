@@ -1,5 +1,6 @@
 ---
 description: Nettoie le code mort, les dépendances et exports inutilisés, sur une base de tests verte, via l'agent refactor-cleaner.
+disable-model-invocation: true
 argument-hint: "[dossier ou vide pour tout le dépôt]"
 ---
 

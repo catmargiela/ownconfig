@@ -1,5 +1,6 @@
 ---
 description: Double revue indépendante d'un diff ou d'une PR sur une grille PASS/FAIL, avec boucle de correction bornée à trois tours.
+disable-model-invocation: true
 argument-hint: [numéro de PR, chemins, ou vide pour le diff courant]
 ---
 

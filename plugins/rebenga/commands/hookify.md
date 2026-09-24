@@ -1,5 +1,6 @@
 ---
 description: Transforme un comportement à interdire en contrôle de hook testé dans le dépôt de config — à partir d'une description ou de l'analyse des sessions récentes.
+disable-model-invocation: true
 argument-hint: "[comportement à interdire, ou vide pour analyser les sessions]"
 ---
 

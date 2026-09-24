@@ -1,5 +1,6 @@
 ---
 description: Pose ou fait tourner un secret dans un .env sans que la valeur apparaisse jamais dans la conversation, l'historique shell ou la sortie d'un outil.
+disable-model-invocation: true
 argument-hint: "<CLE> [fichier .env, vide = .env]"
 ---
 

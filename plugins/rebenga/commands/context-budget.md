@@ -1,5 +1,6 @@
 ---
 description: Estime le contexte résident à chaque tour (CLAUDE.md, skills, agents, MCP, plugins) et propose les trois économies les plus rentables.
+disable-model-invocation: true
 argument-hint: "[vide]"
 ---
 
