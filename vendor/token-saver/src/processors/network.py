@@ -1,0 +1,373 @@
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Network output processor: curl, wget, httpie."""
+
+import json
+import re
+
+from src.processors import base
+from src.processors import utils
+
+
+class NetworkProcessor(base.Processor):
+    """Reduce HTTP transfer noise and summarize large response bodies."""
+
+    priority = 30
+    handles_failure = True
+    hook_patterns = [
+        r"^(curl|wget|http|https)\b",
+    ]
+
+    @property
+    def name(self) -> str:
+        """The stable name used for processor routing and savings tracking."""
+        return "network"
+
+    def can_handle(self, command: str) -> bool:
+        # Match curl, wget, or httpie (http/https commands at start of line)
+        # Avoid false positives: only match http/https as standalone commands,
+        # not as URLs
+        """Return whether this processor supports the supplied command.
+
+        Args:
+            command: Shell command text used for routing.
+
+        Returns:
+            Whether the command matches this processor's supported tools.
+        """
+        return bool(
+            re.search(r"\b(curl|wget)\b", command)
+            or re.match(r"^\s*(http|https)\s+", command)
+        )
+
+    def process(self, command: str, output: str) -> str:
+        """Compress captured output according to this processor's rules.
+
+        Args:
+            command: Original shell command used to select output handling.
+            output: Captured command output before this transformation.
+
+        Returns:
+            Compressed text, or the input when no safe reduction is available.
+        """
+        if not output or not output.strip():
+            return output
+
+        if re.search(r"\bcurl\b", command):
+            return self._process_curl(output, command)
+        if re.search(r"\bwget\b", command):
+            return self._process_wget(output)
+        if re.match(r"^\s*(http|https)\s+", command):
+            return self._process_httpie(output)
+        return output
+
+    def _process_curl(self, output: str, command: str) -> str:
+        """Keep HTTP status and useful headers while reducing transfer noise."""
+        lines = output.splitlines()
+
+        is_verbose = re.search(r"\s-[a-zA-Z]*v|--verbose", command)
+        if not is_verbose:
+            # Non-verbose curl: strip progress meter, then try body compression
+            stripped = self._strip_curl_progress(lines)
+            return self._maybe_compress_body(stripped)
+
+        # Verbose curl: strip TLS, connection, boilerplate headers
+        result = []
+
+        # Headers worth keeping in the response
+        important_headers = {
+            "content-type",
+            "location",
+            "www-authenticate",
+            "set-cookie",
+            "x-ratelimit",
+            "retry-after",
+            "authorization",
+            "content-length",
+            "transfer-encoding",
+            "access-control-allow-origin",
+            "x-request-id",
+        }
+
+        body_lines = []
+        in_body = False
+
+        for line in lines:
+            stripped = line.strip()
+
+            # TLS/SSL handshake noise
+            if re.match(
+                r"^\*\s*(SSL|TLS|ALPN|CAfile|CApath|Certificate|issuer|subject|"
+                r"subjectAlt|Server certificate|Connected|Trying|"
+                r"Connection(ed| #\d)| *expire| *start|"
+                r"TCP_NODELAY|Mark bundle|upload completely|"
+                r"Using Stream|old SSL|Closing|"
+                r"successfully set certificate)\b",
+                stripped,
+            ):
+                continue
+
+            # Request headers (> prefix) -- keep only the method line
+            if stripped.startswith("> "):
+                header_content = stripped[2:].strip()
+                if re.match(
+                    r"^(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+",
+                    header_content,
+                ):
+                    result.append(stripped)
+                continue
+
+            # Response headers (< prefix) -- filter
+            if stripped.startswith("< "):
+                header_content = stripped[2:].strip()
+                # Status line: always keep
+                if re.match(r"^HTTP/", header_content):
+                    result.append(stripped)
+                    continue
+                # Empty header line marks end of headers, body starts
+                if not header_content:
+                    in_body = True
+                    continue
+                # Check if header is important
+                header_lower = (
+                    header_content.split(":")[0].lower()
+                    if ":" in header_content
+                    else ""
+                )
+                if any(header_lower.startswith(h) for h in important_headers):
+                    result.append(stripped)
+                continue
+
+            # Progress meter table (% Total % Received)
+            if re.match(r"^\s+%\s+Total\s+%\s+Received", stripped):
+                continue
+            if re.match(r"^\s*\d+\s+\d+", stripped) and re.search(
+                r"--:--:--|(\d+:){2}\d+", stripped
+            ):
+                continue
+
+            # Info lines with * prefix -- keep only errors
+            if stripped.startswith("* ") and not re.search(
+                r"(error|fail|could not|refused)", stripped, re.I
+            ):
+                continue
+
+            # Keep everything else (response body)
+            if in_body:
+                body_lines.append(line)
+            else:
+                result.append(line)
+
+        # Try to compress body (HTML or JSON)
+        if body_lines:
+            body_text = "\n".join(body_lines)
+            compressed_body = self._maybe_compress_body(body_text)
+            result.append(compressed_body)
+
+        return "\n".join(result)
+
+    def _strip_curl_progress(self, lines: list[str]) -> str:
+        """Strip curl progress meter from non-verbose output."""
+        result = []
+        in_progress_table = False
+        for line in lines:
+            stripped = line.strip()
+            # Progress table header
+            if re.search(r"%\s+Total\s+%\s+Received", stripped):
+                in_progress_table = True
+                continue
+            # Second header line (Dload/Upload columns)
+            if in_progress_table and re.search(r"Dload\s+Upload", stripped):
+                continue
+            # Progress data lines (numbers with time patterns)
+            if re.match(r"^\s*\d+\s+\d+", stripped) and re.search(
+                r"--:--:--|(\d+:){2}\d+", stripped
+            ):
+                in_progress_table = False
+                continue
+            in_progress_table = False
+            result.append(line)
+        return "\n".join(result)
+
+    def _maybe_compress_body(self, text: str) -> str:
+        """Try compressing the body as HTML first, then JSON.
+
+        Returns the original
+        text if neither applies or the body is small enough to keep verbatim.
+        """
+        html_summary = self._maybe_compress_html(text)
+        if html_summary is not None:
+            return html_summary
+        return self._maybe_compress_json(text)
+
+    def _maybe_compress_json(self, text: str) -> str:
+        """If the text is a large JSON response, summarize its structure."""
+        stripped = text.strip()
+        if not stripped or (not stripped.startswith(("{", "["))):
+            return text
+
+        try:
+            data = json.loads(stripped)
+        except (json.JSONDecodeError, ValueError):
+            return text
+
+        # Only compress if the JSON is large
+        if len(stripped) < 1500:
+            return text
+
+        compressed = utils.compress_json_value(data, max_depth=2)
+        summary = json.dumps(compressed, indent=2, default=str)
+        return (
+            f"{summary}\n\n({len(stripped)} chars, {len(text.splitlines())} "
+            f"lines)"
+        )
+
+    _HTML_DETECT_RE = re.compile(r"<!doctype\s+html|<html\b", re.IGNORECASE)
+    _HTML_TITLE_RE = re.compile(
+        r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL
+    )
+    _HTML_H1_RE = re.compile(r"<h1[^>]*>(.*?)</h1>", re.IGNORECASE | re.DOTALL)
+    _HTML_TAG_STRIP_RE = re.compile(r"<[^>]+>")
+    _HTML_ERROR_RE = re.compile(
+        r"(?:fatal\s+error|uncaught\s+(?:exception|error)|"
+        r"warning:|notice:|deprecated:|stack\s+trace|traceback)"
+        r"[^<\n]{0,200}",
+        re.IGNORECASE,
+    )
+
+    def _maybe_compress_html(self, text: str) -> str | None:
+        """If the text is a large HTML response, return a structural summary.
+
+        Returns None if the text isn't HTML or is small enough to keep as-is.
+        """
+        stripped = text.strip()
+        if not stripped or len(stripped) < 1500:
+            return None
+        # Cheap detection on first ~500 chars
+        if not self._HTML_DETECT_RE.search(stripped[:500]):
+            return None
+
+        title_m = self._HTML_TITLE_RE.search(stripped)
+        title = (
+            self._HTML_TAG_STRIP_RE.sub("", title_m.group(1)).strip()[:120]
+            if title_m
+            else "(no title)"
+        )
+
+        h1_m = self._HTML_H1_RE.search(stripped)
+        h1 = (
+            self._HTML_TAG_STRIP_RE.sub("", h1_m.group(1)).strip()[:120]
+            if h1_m
+            else None
+        )
+
+        counts = {
+            "links": len(re.findall(r"<a\b", stripped, re.IGNORECASE)),
+            "images": len(re.findall(r"<img\b", stripped, re.IGNORECASE)),
+            "scripts": len(re.findall(r"<script\b", stripped, re.IGNORECASE)),
+            "stylesheets": len(
+                re.findall(r"<link\b[^>]*stylesheet", stripped, re.IGNORECASE)
+            ),
+            "forms": len(re.findall(r"<form\b", stripped, re.IGNORECASE)),
+            "inputs": len(re.findall(r"<input\b", stripped, re.IGNORECASE)),
+        }
+
+        parts = [
+            (
+                f"[HTML page, {len(stripped)} chars, {len(text.splitlines())} "
+                f"lines]"
+            ),
+            f"<title>: {title}",
+        ]
+        if h1 and h1 != title:
+            parts.append(f"<h1>: {h1}")
+        parts.append(
+            "Structure: "
+            + ", ".join(f"{n} {k}" for k, n in counts.items() if n > 0)
+        )
+
+        # Surface any obvious error markers — useful for debugging server
+        # responses
+        error_m = self._HTML_ERROR_RE.search(stripped)
+        if error_m:
+            parts.append(f"Error markers: {error_m.group(0).strip()[:200]}")
+
+        return "\n".join(parts)
+
+    def _process_wget(self, output: str) -> str:
+        """Retain transfer results and diagnostics without download progress."""
+        lines = output.splitlines()
+        result = []
+
+        useful_re = re.compile(
+            r"^(Length:|Saving to:|Location:|HTTP request sent|--\d{4})"
+            r"|^\d{3}\s"
+            r"|\b(saved|ERROR|error|failed|refused|not found)\b",
+            re.I,
+        )
+
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if useful_re.search(stripped):
+                result.append(stripped)
+
+        return "\n".join(result) if result else output
+
+    def _process_httpie(self, output: str) -> str:
+        """Keep HTTPie status and useful headers, summarizing large bodies."""
+        lines = output.splitlines()
+        result = []
+        body_lines = []
+        in_body = False
+
+        for line in lines:
+            stripped = line.strip()
+
+            # Status line: HTTP/1.1 200 OK
+            if re.match(r"^HTTP/", stripped):
+                result.append(line)
+                continue
+
+            # Headers (key: value format before body)
+            if not in_body and re.match(r"^[\w-]+:", stripped):
+                header_name = stripped.split(":")[0].lower()
+                # Keep important headers
+                important = {
+                    "content-type",
+                    "location",
+                    "set-cookie",
+                    "www-authenticate",
+                    "content-length",
+                    "x-request-id",
+                }
+                if any(header_name.startswith(h) for h in important):
+                    result.append(line)
+                continue
+
+            # Empty line between headers and body
+            if not in_body and not stripped:
+                in_body = True
+                continue
+
+            if in_body:
+                body_lines.append(line)
+
+        # Compress body (HTML or JSON)
+        if body_lines:
+            body_text = "\n".join(body_lines)
+            compressed = self._maybe_compress_body(body_text)
+            result.append(compressed)
+
+        return "\n".join(result) if result else output

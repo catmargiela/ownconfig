@@ -1,0 +1,202 @@
+Sending build context to Docker daemon  45.2MB
+
+Step 1/20 : FROM python:3.12-slim
+ ---> Running in abc0001def
+Removing intermediate container abc0001def
+ ---> sha256:aaaaaaaaaaaa0001
+  Downloading package1-dep0 (1.2 MB)
+  Installing package1-dep0
+  Downloading package1-dep1 (1.2 MB)
+  Installing package1-dep1
+  Downloading package1-dep2 (1.2 MB)
+  Installing package1-dep2
+Step 2/20 : RUN pip install package2
+ ---> Running in abc0002def
+Removing intermediate container abc0002def
+ ---> sha256:aaaaaaaaaaaa0002
+  Downloading package2-dep0 (1.2 MB)
+  Installing package2-dep0
+  Downloading package2-dep1 (1.2 MB)
+  Installing package2-dep1
+  Downloading package2-dep2 (1.2 MB)
+  Installing package2-dep2
+Step 3/20 : RUN pip install package3
+ ---> Running in abc0003def
+Removing intermediate container abc0003def
+ ---> sha256:aaaaaaaaaaaa0003
+  Downloading package3-dep0 (1.2 MB)
+  Installing package3-dep0
+  Downloading package3-dep1 (1.2 MB)
+  Installing package3-dep1
+  Downloading package3-dep2 (1.2 MB)
+  Installing package3-dep2
+Step 4/20 : RUN pip install package4
+ ---> Running in abc0004def
+Removing intermediate container abc0004def
+ ---> sha256:aaaaaaaaaaaa0004
+  Downloading package4-dep0 (1.2 MB)
+  Installing package4-dep0
+  Downloading package4-dep1 (1.2 MB)
+  Installing package4-dep1
+  Downloading package4-dep2 (1.2 MB)
+  Installing package4-dep2
+Step 5/20 : RUN pip install package5
+ ---> Running in abc0005def
+Removing intermediate container abc0005def
+ ---> sha256:aaaaaaaaaaaa0005
+  Downloading package5-dep0 (1.2 MB)
+  Installing package5-dep0
+  Downloading package5-dep1 (1.2 MB)
+  Installing package5-dep1
+  Downloading package5-dep2 (1.2 MB)
+  Installing package5-dep2
+Step 6/20 : RUN pip install package6
+ ---> Running in abc0006def
+Removing intermediate container abc0006def
+ ---> sha256:aaaaaaaaaaaa0006
+  Downloading package6-dep0 (1.2 MB)
+  Installing package6-dep0
+  Downloading package6-dep1 (1.2 MB)
+  Installing package6-dep1
+  Downloading package6-dep2 (1.2 MB)
+  Installing package6-dep2
+Step 7/20 : RUN pip install package7
+ ---> Running in abc0007def
+Removing intermediate container abc0007def
+ ---> sha256:aaaaaaaaaaaa0007
+  Downloading package7-dep0 (1.2 MB)
+  Installing package7-dep0
+  Downloading package7-dep1 (1.2 MB)
+  Installing package7-dep1
+  Downloading package7-dep2 (1.2 MB)
+  Installing package7-dep2
+Step 8/20 : RUN pip install package8
+ ---> Running in abc0008def
+Removing intermediate container abc0008def
+ ---> sha256:aaaaaaaaaaaa0008
+  Downloading package8-dep0 (1.2 MB)
+  Installing package8-dep0
+  Downloading package8-dep1 (1.2 MB)
+  Installing package8-dep1
+  Downloading package8-dep2 (1.2 MB)
+  Installing package8-dep2
+Step 9/20 : RUN pip install package9
+ ---> Running in abc0009def
+Removing intermediate container abc0009def
+ ---> sha256:aaaaaaaaaaaa0009
+  Downloading package9-dep0 (1.2 MB)
+  Installing package9-dep0
+  Downloading package9-dep1 (1.2 MB)
+  Installing package9-dep1
+  Downloading package9-dep2 (1.2 MB)
+  Installing package9-dep2
+Step 10/20 : RUN pip install package10
+ ---> Running in abc0010def
+Removing intermediate container abc0010def
+ ---> sha256:aaaaaaaaaaaa0010
+  Downloading package10-dep0 (1.2 MB)
+  Installing package10-dep0
+  Downloading package10-dep1 (1.2 MB)
+  Installing package10-dep1
+  Downloading package10-dep2 (1.2 MB)
+  Installing package10-dep2
+Step 11/20 : RUN pip install package11
+ ---> Running in abc0011def
+Removing intermediate container abc0011def
+ ---> sha256:aaaaaaaaaaaa0011
+  Downloading package11-dep0 (1.2 MB)
+  Installing package11-dep0
+  Downloading package11-dep1 (1.2 MB)
+  Installing package11-dep1
+  Downloading package11-dep2 (1.2 MB)
+  Installing package11-dep2
+Step 12/20 : RUN pip install package12
+ ---> Running in abc0012def
+Removing intermediate container abc0012def
+ ---> sha256:aaaaaaaaaaaa0012
+  Downloading package12-dep0 (1.2 MB)
+  Installing package12-dep0
+  Downloading package12-dep1 (1.2 MB)
+  Installing package12-dep1
+  Downloading package12-dep2 (1.2 MB)
+  Installing package12-dep2
+Step 13/20 : RUN pip install package13
+ ---> Running in abc0013def
+Removing intermediate container abc0013def
+ ---> sha256:aaaaaaaaaaaa0013
+  Downloading package13-dep0 (1.2 MB)
+  Installing package13-dep0
+  Downloading package13-dep1 (1.2 MB)
+  Installing package13-dep1
+  Downloading package13-dep2 (1.2 MB)
+  Installing package13-dep2
+Step 14/20 : RUN pip install package14
+ ---> Running in abc0014def
+Removing intermediate container abc0014def
+ ---> sha256:aaaaaaaaaaaa0014
+  Downloading package14-dep0 (1.2 MB)
+  Installing package14-dep0
+  Downloading package14-dep1 (1.2 MB)
+  Installing package14-dep1
+  Downloading package14-dep2 (1.2 MB)
+  Installing package14-dep2
+Step 15/20 : RUN pip install package15
+ ---> Running in abc0015def
+Removing intermediate container abc0015def
+ ---> sha256:aaaaaaaaaaaa0015
+  Downloading package15-dep0 (1.2 MB)
+  Installing package15-dep0
+  Downloading package15-dep1 (1.2 MB)
+  Installing package15-dep1
+  Downloading package15-dep2 (1.2 MB)
+  Installing package15-dep2
+Step 16/20 : RUN pip install package16
+ ---> Running in abc0016def
+Removing intermediate container abc0016def
+ ---> sha256:aaaaaaaaaaaa0016
+  Downloading package16-dep0 (1.2 MB)
+  Installing package16-dep0
+  Downloading package16-dep1 (1.2 MB)
+  Installing package16-dep1
+  Downloading package16-dep2 (1.2 MB)
+  Installing package16-dep2
+Step 17/20 : RUN pip install package17
+ ---> Running in abc0017def
+Removing intermediate container abc0017def
+ ---> sha256:aaaaaaaaaaaa0017
+  Downloading package17-dep0 (1.2 MB)
+  Installing package17-dep0
+  Downloading package17-dep1 (1.2 MB)
+  Installing package17-dep1
+  Downloading package17-dep2 (1.2 MB)
+  Installing package17-dep2
+Step 18/20 : RUN pip install package18
+ ---> Running in abc0018def
+Removing intermediate container abc0018def
+ ---> sha256:aaaaaaaaaaaa0018
+  Downloading package18-dep0 (1.2 MB)
+  Installing package18-dep0
+  Downloading package18-dep1 (1.2 MB)
+  Installing package18-dep1
+  Downloading package18-dep2 (1.2 MB)
+  Installing package18-dep2
+Step 19/20 : RUN pip install package19
+ ---> Running in abc0019def
+Removing intermediate container abc0019def
+ ---> sha256:aaaaaaaaaaaa0019
+  Downloading package19-dep0 (1.2 MB)
+  Installing package19-dep0
+  Downloading package19-dep1 (1.2 MB)
+  Installing package19-dep1
+  Downloading package19-dep2 (1.2 MB)
+  Installing package19-dep2
+Step 20/20 : RUN pip install package20
+ ---> Running in abc0020def
+  Downloading package20-dep0 (1.2 MB)
+  Installing package20-dep0
+  Downloading package20-dep1 (1.2 MB)
+  Installing package20-dep1
+  Downloading package20-dep2 (1.2 MB)
+  Installing package20-dep2
+Successfully built sha256:abcdef123456
+Successfully tagged myapp:latest

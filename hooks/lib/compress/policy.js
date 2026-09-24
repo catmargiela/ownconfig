@@ -3,13 +3,16 @@
  * Output-compression eligibility.
  *
  * A command is rewritten ONLY when it is one plain invocation of an allowlisted
- * read-only or build tool. The rewrite hides the command behind the wrapper, so
+ * read-only or build tool. The rules of the families added with the
+ * token-saver engine (kubectl, helm, terraform, package managers…) live in
+ * policy-families.js. The rewrite hides the command behind the wrapper, so
  * a false positive here would launder a command past the permission flow: when
  * in doubt, refuse. Refusing only means "not compressed", never "blocked".
  *
  *   eligible(command) -> { ok, processor, reason }
  */
 const { stripQuoted } = require('../pre-bash');
+const families = require('./policy-families');
 
 const MAX_LEN = 1000;
 const MAX_WORDS = 60;
@@ -177,8 +180,11 @@ function composeRule(args) {
 }
 
 function dockerRule(words) {
+  // -H/--host/--context/--config anywhere: another daemon, never compressed.
+  if (families.dockerRemote(words.slice(1))) return null;
   if (words[0] === 'docker-compose') return composeRule(words.slice(1));
   if (words[1] === 'compose') return composeRule(words.slice(2));
+  if (words[1] === 'logs') return families.dockerLogsRule(words);
   if (!['ps', 'images', 'build', 'pull'].includes(words[1])) return null;
   return has(words, '-o') ? null : 'docker';
 }
@@ -197,13 +203,18 @@ function ghRule(words) {
   return has(words, '-w') ? null : 'gh';
 }
 
+const pkg = families.packageRule;
+
 const RULES = {
-  git: gitRule, go: goRule, bun: (w) => jsTestRule(w) || buildScriptRule(w),
+  ...families.RULES,
+  git: gitRule, go: goRule, bun: (w) => jsTestRule(w) || buildScriptRule(w) || pkg(w),
   npx: (w) => jsTestRule(w) || buildScriptRule(w) || lintRule(w),
   bunx: (w) => jsTestRule(w) || buildScriptRule(w) || lintRule(w),
-  vitest: jsTestRule, jest: jsTestRule, npm: buildScriptRule, pnpm: buildScriptRule,
-  yarn: buildScriptRule, next: buildScriptRule, tsc: buildScriptRule, eslint: lintRule,
-  'golangci-lint': lintRule, cargo: cargoRule, docker: dockerRule, 'docker-compose': dockerRule,
+  vitest: jsTestRule, jest: jsTestRule, npm: (w) => buildScriptRule(w) || pkg(w),
+  pnpm: (w) => buildScriptRule(w) || pkg(w), yarn: (w) => buildScriptRule(w) || pkg(w),
+  next: buildScriptRule, tsc: buildScriptRule, eslint: lintRule,
+  'golangci-lint': lintRule, cargo: (w) => cargoRule(w) || families.cargoFmtRule(w),
+  docker: dockerRule, 'docker-compose': dockerRule,
   ls: fsRule, find: fsRule, tree: fsRule, rg: fsRule, grep: fsRule, gh: ghRule,
 };
 

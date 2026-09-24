@@ -397,4 +397,4 @@ fs.rmSync(TMP, { recursive: true, force: true });
 
 // ---------------------------------------------------------------- résultat, puis suites compression, vault, thèmes
 console.log(`\n  ${pass} réussis, ${fail} échoués sur ${pass + fail}\n`);
-process.exit(fail || ['test-compress.js', 'test-vault.js', 'test-themes.js', 'test-guards.js'].map((f) => spawnSync('node', [path.join(__dirname, f)], { stdio: 'inherit' }).status).some(Boolean) ? 1 : 0);
+process.exit(fail || ['test-compress.js', 'test-compress-engine.js', 'test-vault.js', 'test-themes.js', 'test-guards.js'].map((f) => spawnSync('node', [path.join(__dirname, f)], { stdio: 'inherit' }).status).some(Boolean) ? 1 : 0);

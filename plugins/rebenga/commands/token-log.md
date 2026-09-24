@@ -9,8 +9,9 @@ Lecture seule : ne rien modifier, ne rien supprimer.
 
 Source : `~/.claude/state/ccx/compress-stats.jsonl`, une ligne JSON par commande
 passée par le wrapper — `ts`, `cmd` (deux premiers mots seulement, jamais les
-arguments : un argument peut contenir un secret), `processor`, `before` et
-`after` (en caractères), `exit`.
+arguments : un argument peut contenir un secret), `processor` (`node:git`,
+`ts:kubectl`…), `engine` (`node`, `python` ou `none`), `before` et `after`
+(en caractères), `exit`.
 
 Arguments :
 - un nombre : la période en jours (7 si absent) ;

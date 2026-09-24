@@ -39,6 +39,7 @@ retire ces liens comme les autres.
 | `agents/` | 5 sous-agents : relecture, sécurité, build, front, tests |
 | `skills/` | 5 workflows déclenchés par leur description : `git-ship`, `verification-loop`, `vault-note`, `project-onboarding`, `theme-edit` |
 | `hooks/` | dispatcher + contrôles + pont Obsidian + moniteur de contexte + rappel des fichiers compagnons + compression des sorties Bash (`hooks/lib/compress/`) |
+| `vendor/token-saver/` | moteur de compression [token-saver](https://github.com/ppgranger/token-saver) (Apache-2.0), `src/` non modifié, appelé par `hooks/lib/compress/ts_adapter.py` ; jamais installé, n'enregistre aucun hook (`NOTICE`) |
 | `bin/statusline.sh` | barre de statut : dossier, branche git, modèle, jauge de contexte, usage `5h N% · 7j N%`, coût |
 | `bin/gh-mcp-headers.sh` | `headersHelper` du serveur MCP GitHub : lit le jeton de `gh` à chaque connexion, jamais écrit sur disque ; tolère un environnement vide (`HOME` déduit du compte, `gh`/`jq` trouvés par `PATH` puis Homebrew) |
 | `plugins/rebenga/` | plugin local : commandes `rebenga:*`, agents spécialisés, skills TDD et e2e (voir plus bas) |
@@ -46,7 +47,7 @@ retire ces liens comme les autres.
 | `themes/` | thèmes Claude Code (`portal`, `catppuccin-mocha`, `catppuccin-latte`), liés un par un dans `~/.claude/themes/` ; `/theme` pour choisir |
 | `bin/theme-check.js` | vérifie un thème : forme, clés connues, syntaxe des couleurs, contraste texte / fond ≥ 4.5 (utilisé par la skill `theme-edit`) |
 | `bin/check-plugin.sh` | contrôle structurel de la marketplace, du plugin et des frontmatters, sans la CLI `claude` (utilisé par la CI) |
-| `.github/workflows/ci.yml` | CI GitHub : `node test.js`, thèmes et manifestes à chaque PR et à chaque push sur `main` |
+| `.github/workflows/ci.yml` | CI GitHub : `node test.js` (Node, Go et Python 3.12), thèmes et manifestes à chaque PR et à chaque push sur `main` |
 | `rules/templates/` | modèles de règles **par projet** (jamais installés en global) |
 
 Pas de dossier `commands/` à la racine : une skill se déclenche seule, une
@@ -73,7 +74,8 @@ CCX_DISABLED=1 claude         # tout couper
 `CCX_ALLOW_MIGRATION=1` (passer outre la garde des migrations),
 `CCX_NO_TYPECHECK=1`, `CCX_DEBUG=1` (voir les erreurs internes des hooks),
 `CCX_RAW=1 <commande>` (sortie brute d'une commande), `CCX_COMPRESS=off` (couper la
-compression des sorties).
+compression des sorties), `CCX_COMPRESS_ENGINE=node|python|auto` (moteur de
+compression), `CCX_PYTHON=/chemin/absolu/python3` (interpréteur du moteur Python).
 
 ## Hooks
 
@@ -270,6 +272,36 @@ séparés, rend le code de sortie de la commande (signal : 128 + n), et imprime 
 version condensée de chaque flux. La commande d'origine reste lisible en
 commentaire, pour qui relit l'appel.
 
+**Deux moteurs.** La condensation est faite soit par le moteur Node de ce dépôt
+(`hooks/lib/compress/engine.js` et `processors/`), soit par les processeurs de
+[token-saver](https://github.com/ppgranger/token-saver) (Apache-2.0), vendorisés
+dans `vendor/token-saver/` et appelés par un adaptateur Python
+(`hooks/lib/compress/ts_adapter.py`, via `python.js`). Le choix, en mode `auto`
+(défaut) :
+
+- commande pour laquelle le moteur Node a un **processeur dédié** (`git`,
+  `go test`, `next build`, `eslint`, `docker`, `ls`/`find`, `rg`, `gh`…) → Node.
+  Mesuré sur les fixtures de `tests/compress/`, token-saver y perd de
+  l'information : message d'échec d'un `go test -v` (la ligne `x_test.go:42: …`
+  avant `--- FAIL`), table des routes de `next build`, patchs entiers d'un
+  `git log -p`, commits au-delà du 10ᵉ d'un `git log` ;
+- toute autre commande éligible (kubectl, terraform, mvn, npm ci… — processeur
+  Node `generic`) → token-saver d'abord, puis Node si Python est absent, plante,
+  dépasse 5 s ou gagne moins de 20 %.
+
+`CCX_COMPRESS_ENGINE=node` force le moteur Node partout,
+`CCX_COMPRESS_ENGINE=python` force token-saver partout (échec → sortie brute).
+Python ≥ 3.10 requis (exigence de token-saver). L'interpréteur n'est **jamais**
+cherché dans le `PATH` (un `python3` placé en tête par direnv, mise ou un venv
+s'exécuterait sans demande de permission) : `CCX_PYTHON` s'il désigne par un
+chemin absolu un fichier exécutable, puis `/opt/homebrew/bin/python3`,
+`/usr/local/bin/python3`, `/usr/bin/python3`. Un candidat trop ancien (le
+`/usr/bin/python3` 3.9 de macOS) passe au suivant ; aucun candidat → repli Node.
+Limite : `CCX_PYTHON` est lu dans l'environnement de Claude Code. Un `.envrc`
+chargé avant son lancement peut donc y mettre un interpréteur quelconque, comme
+il pourrait déjà modifier le `PATH` des hooks. Ne le définir que dans son propre
+profil shell.
+
 **Modèle de sécurité.**
 
 - **Liste blanche stricte** de commandes de lecture et de build (voir le tableau).
@@ -290,6 +322,20 @@ commentaire, pour qui relit l'appel.
   `--watch`, `vitest` sans `run`), d'écriture (`--fix`, `-u`, `--output`,
   `find -exec`/`-delete`) et les commandes lancées en arrière-plan. Le wrapper
   revérifie l'éligibilité avant d'exécuter.
+- **Moteur Python isolé.** Interpréteur désigné par un chemin absolu (jamais
+  via le `PATH`, voir plus haut), lancé en `-I -B` depuis `/`, environnement
+  réduit à `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, `HOME` pointé vers un dossier inexistant, toutes les
+  variables `TOKEN_SAVER_*` retirées : ni `~/.token-saver/config.json`, ni
+  processeurs utilisateur, ni `.token-saver.json` de projet. L'adaptateur
+  vérifie que toute la configuration vient des valeurs par défaut et que ni
+  statistiques, ni journal d'audit, ni stockage delta, ni vérification de mise à
+  jour ne sont chargés — sinon il refuse (`ok: false`). Rien n'est écrit, pas
+  même du bytecode. Il n'exécute rien : la commande ne sert qu'à choisir le
+  processeur. Entrée plafonnée à 8 Mo, 5 s maximum.
+- **Réponse Python non fiable.** Seuls les deux textes rendus sont utilisés ;
+  le code de sortie reste celui de la commande, stdout et stderr restent
+  séparés, et la récupération des lignes critiques du moteur Node repasse
+  par-dessus (un processeur token-saver qui avale une erreur la voit remise).
 - **Rien ne se perd.** Sortie de moins de 2000 caractères ou gain inférieur à
   20 % : sortie brute inchangée. Erreur interne : sortie brute, même code.
   Sortie de plus de 8 Mo : transmise telle quelle. Sortie binaire : octet pour
@@ -297,7 +343,7 @@ commentaire, pour qui relit l'appel.
 - **Récupération des lignes critiques.** Toute ligne d'erreur de l'entrée
   (`error`, `FAIL`, `panic`, `fatal`, `Traceback`, `ENOENT`, `fichier:12:5:`…)
   absente du résultat y est remise (30 max), sous `[ccx: N ligne(s) d'erreur
-  récupérée(s)]`. Toujours après un échec ; après un succès aussi, sauf pour les
+  récupérée(s)]` — quel que soit le moteur. Toujours après un échec ; après un succès aussi, sauf pour les
   listings, recherches et sorties `git` (un fichier `not-found.tsx` ou un commit
   « fix error handling » ne sont pas des erreurs). Un
   échec sur une commande dont le processeur ne gère pas les échecs passe par le
@@ -312,16 +358,30 @@ commentaire, pour qui relit l'appel.
   commande inéligible, et la réécriture refuse de toute façon une entrée
   multi-ligne (double barrière, test de non-régression).
 
-Une sortie compressée se termine par une ligne :
-`[ccx: sortie compressée 12630→1159 car. (git) — CCX_RAW=1 git log pour la sortie brute]`.
+Une sortie compressée se termine par une ligne qui nomme le moteur et le
+processeur : `[ccx: sortie compressée 22127→2282 car. (node:git) — CCX_RAW=1 git log pour la sortie brute]`
+(`ts:kubectl`, `ts:maven_gradle`… pour token-saver).
 
-Gains mesurés sur ce dépôt : `git log` 12 630 → 1 159 caractères (−91 %),
-`rg -n function hooks` −56 %, `find . -type f` −45 %. Les diffs gardent toutes
-leurs lignes par choix : sous 20 % de gain, la sortie brute est rendue.
+Gains mesurés sur ce dépôt (caractères, moteur Node / token-saver forcé) :
+
+| Commande | Brut | Node (`auto`) | token-saver forcé |
+|---|---|---|---|
+| `git log` | 22 127 | 2 282 (−90 %) | 750 (−97 %) — 10 commits puis « … (20 more commits) » |
+| `git log -p -5` | 69 346 | brut (log explicite) | 358 (−99 %) — patchs supprimés |
+| `git diff HEAD~5` | 321 420 | brut (diff gardé en entier) | 158 790 (−51 %) — contexte réduit |
+| `find . -type f` | 9 413 | 2 634 (−72 %) | 2 294 (−76 %) |
+| `rg -n function hooks` | 19 947 | 9 139 (−54 %) | 2 204 (−89 %) |
+
+Les diffs gardent toutes leurs lignes par choix : sous 20 % de gain, la sortie
+brute est rendue. Coût de l'appel Python : ~70 à 100 ms de plus par sortie compressée
+(seulement au-delà de 2000 caractères).
 
 **Contournements.** `CCX_RAW=1 <commande>` : sortie brute pour cette commande.
-`CCX_COMPRESS=off` : compression coupée. Profil `minimal` ou `CCX_DISABLED=1` :
+`CCX_COMPRESS=off` : compression coupée. `CCX_COMPRESS_ENGINE=node|python|auto` :
+choix du moteur. Profil `minimal` ou `CCX_DISABLED=1` :
 coupée aussi.
+
+Moteur Node — processeurs dédiés :
 
 | Processeur | Commandes | Ce qui est fait |
 |---|---|---|
@@ -336,21 +396,63 @@ coupée aussi.
 | `gh` | `gh pr checks/list`, `gh issue list`, `gh run list/view` | checks réussis comptés, échecs et en attente gardés ; listes coupées à 40 lignes avec compte |
 | `generic` | tout échec non géré | barres de progression retirées, lignes identiques repliées `(xN)`, au-delà de 200 lignes : 80 premières + 60 dernières + lignes critiques du milieu |
 
+Familles confiées à token-saver (processeur Node de repli : `generic`, sauf
+`docker logs` → `docker`). Lecture, build et test seulement ; chaque variante
+d'écriture, interactive ou suivie est refusée :
+
+| Famille | Accepté | Refusé (entre autres) |
+|---|---|---|
+| kubectl | `get`, `describe`, `logs`, `top` ; `-n`/`--context`/`-A` en tête | `apply`, `delete`, `create`, `edit`, `exec`, `port-forward`, `rollout`, `scale` ; `logs -f`/`--follow`/`-pf`, `get -w`/`--watch`, `--raw`, `--kubeconfig`, `--token`, `--as`, `-o json/yaml` |
+| helm | `list`, `status`, `template`, `history` | `install`, `upgrade`, `uninstall`, `rollback`, `--post-renderer` |
+| terraform, tofu | `plan`, `validate`, `show`, `fmt -check` ; `-chdir=` | `apply`, `destroy`, `init`, `import`, `state rm`, `plan -out`, `-json`, `fmt` sans `-check` |
+| pulumi, cdktf | `pulumi preview` ; `cdktf synth`, `cdktf diff` | `up`, `destroy`, `deploy`, `preview --refresh`/`--save-plan` |
+| ansible-playbook | avec `--check`/`-C`, `--syntax-check`, `--list-*` | sans mode vérification ; `--ask-pass`, `--ask-become-pass`, `--step` |
+| npm, pnpm, yarn, bun | `npm ci`, `pnpm install --frozen-lockfile`, `bun install --frozen-lockfile`, `yarn install --immutable` (sans paquet) ; `ls`/`list`, `outdated`, `audit`, `bun pm ls` | `install`/`i`/`add` d'un paquet ou sans verrou figé (scripts de cycle de vie de code nouveau), `-g`/`--global`, `audit fix` |
+| pip, poetry, uv | `pip list/freeze/check`, `poetry show`, `uv pip list/freeze` | `install`, `uninstall` |
+| mvn, gradle | `./mvnw`, `./gradlew` ; buts `clean compile test package verify`, tâches `clean build test check assemble compile*` | `install`, `deploy`, `publish`, `exec:*`, `bootRun`, `--continuous`, `--scan` ; code ou config hors projet : `-Dmaven.ext.class.path`, `-s`/`--settings`, `-gs`, `-t`/`--toolchains`, `--init-script`/`-I`, `-c`/`--settings-file`, `-g`/`--gradle-user-home` ; propriétés JVM : tout `-D`/`-P` sauf, pour Maven, `-DskipTests`, `-DskipITs`, `-Dmaven.test.skip`, `-Dtest=…` et les profils `-Pnom` (Gradle : aucun) |
+| cargo | `cargo fmt --check` | `cargo fmt` |
+| just, mise, nix | `just --list`/`--summary`, `mise ls`, `nix flake show/check` | une recette `just`, `mise install/use`, `nix run`, `flake update`, `--commit-lock-file`, `--option` |
+| jq, yq | un filtre et au moins un fichier | `-i`/`--inplace`/`--in-place`, yq `-s`/`--split-exp`/`--split-exp-file` (écrivent des fichiers), `-n`, sans fichier, lecture de l'environnement (`env`, `$ENV`, `strenv`) |
+| système | `systemctl status`, `journalctl`, `docker logs`, `df`, `du`, `free`, `ps`, `uname` | `systemctl` autre que `status`, `journalctl -f`/`--vacuum-*`/`--rotate`, `docker logs -f` ; `ps` avec `e` dans un groupe d'options (`eww`, `aux e`, `-e`, `-ef` — environnement des processus, donc secrets) ou un champ `env`/`environ` ; toute commande `docker` avec `-H`/`--host`/`--context`/`--config` (autre démon), `docker logs -c` |
+
+**Exclus volontairement**, même si token-saver sait les traiter : `curl`,
+`wget`, `http` (réseau ; token-saver garde les en-têtes `Authorization`),
+`ssh`, `scp`, `psql`, `mysql`, `sqlite3` (accès distants ou données), `env`,
+`printenv`, `set` (secrets), `cat`, `head`, `tail` (contenu de fichiers),
+`aws`, `gcloud`, `az`.
+
 **Jamais compressé** : ce qui n'est pas sur la liste, toute commande composée,
 une sortie structurée (`--json`…), un flux suivi (`-f`, `--watch`), une commande
 en arrière-plan, une sortie courte ou peu compressible.
 
 **Statistiques.** Chaque commande enveloppée ajoute une ligne à
 `~/.claude/state/ccx/compress-stats.jsonl` : horodatage, deux premiers mots de la
-commande (`git log`, `go test` — jamais d'argument), processeur, tailles avant et
-après, code de sortie. Aucun contenu de sortie. Le fichier est élagué de moitié
+commande (`git log`, `go test` — jamais d'argument), moteur (`node`, `python`,
+`none`), processeur (`node:git`, `ts:kubectl`…), tailles avant et après, code de
+sortie. Aucun contenu de sortie. Le fichier est élagué de moitié
 au-delà de 1 Mo. `/rebenga:token-stats [jours]` en fait le bilan, `/rebenga:token-log [jours] [--toutes]` liste les commandes une par une.
 
-Tests : `node test.js` lance aussi `test-compress.js` — liste blanche, intégration
-au dispatcher, wrapper (codes de sortie, stderr, erreurs internes) et seuils de
-qualité par processeur sur des sorties réalistes (`tests/compress/`) : chaque
-cas déclare les chaînes qui doivent survivre et le gain minimal attendu, y compris
-des échecs dont l'erreur est enfouie au milieu d'une longue sortie.
+Tests : `node test.js` lance aussi `test-compress.js` — liste blanche (dont
+chaque famille token-saver et chacune de ses variantes refusées, injections
+comprises), intégration au dispatcher, wrapper (codes de sortie, stderr, erreurs
+internes) et seuils de qualité par processeur sur des sorties réalistes
+(`tests/compress/`) : chaque cas déclare les chaînes qui doivent survivre et le
+gain minimal attendu, y compris des échecs dont l'erreur est enfouie au milieu
+d'une longue sortie. Et `test-compress-engine.js` : contrat et isolation de
+l'adaptateur (aucun fichier écrit, config et processeurs utilisateur ignorés,
+aucun module disque/réseau chargé), résolution de l'interpréteur (un `python3`
+en tête du `PATH` n'est jamais exécuté, `CCX_PYTHON` relatif ou non exécutable
+ignoré, candidat trop ancien → suivant), choix du moteur (Python absent, planté,
+bloqué, menteur → repli Node ; code de sortie jamais modifié), portes de
+qualité token-saver contre Node sur six sorties de la pile habituelle (dont
+quatre scénarios d'audit de token-saver, `tests/compress/upstream/`) et sur les
+nouvelles familles. En CI, `CCX_PYTHON` désigne l'interpréteur de
+`setup-python` et `CCX_TEST_REQUIRE_PYTHON=1` transforme tout test Python
+ignoré en échec.
+
+Moteur token-saver : [ppgranger/token-saver](https://github.com/ppgranger/token-saver),
+Apache License 2.0, commit `19d47b2` — copie réduite et non modifiée de `src/`,
+détail des chemins retirés dans `vendor/token-saver/NOTICE`.
 
 ## Étendre
 

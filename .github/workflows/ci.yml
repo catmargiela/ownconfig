@@ -19,6 +19,12 @@ jobs:
         with:
           node-version: 22
 
+      # Python engine of the output compression (vendor/token-saver needs >= 3.10).
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: '3.12'
+
       - uses: actions/setup-go@v5
         with:
           go-version: stable
@@ -28,6 +34,9 @@ jobs:
         run: node test.js
         env:
           SHELL: /bin/bash
+          CCX_TEST_REQUIRE_PYTHON: '1'
+          # python.js never searches PATH: point it at the setup-python interpreter.
+          CCX_PYTHON: ${{ steps.python.outputs.python-path }}
 
       - name: Themes
         run: node bin/theme-check.js themes/*.json

@@ -8,8 +8,9 @@ Résume ce qu'a économisé la compression des sorties Bash sur les `$ARGUMENTS`
 derniers jours (7 si vide). Lecture seule : ne rien modifier, ne rien supprimer.
 
 Source : `~/.claude/state/ccx/compress-stats.jsonl`, une ligne JSON par commande
-passée par le wrapper — `ts`, `cmd` (deux premiers mots), `processor`, `before`
-et `after` (en caractères), `exit`. Aucun contenu de sortie n'y est stocké.
+passée par le wrapper — `ts`, `cmd` (deux premiers mots), `processor` (`node:git`,
+`ts:kubectl`…), `engine` (`node`, `python` ou `none`), `before` et `after`
+(en caractères), `exit`. Aucun contenu de sortie n'y est stocké.
 
 Estimation : **tokens ≈ caractères / 4**, toujours étiquetée « est. ».
 
