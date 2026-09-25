@@ -15,6 +15,13 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+// Every suite (this one and those it spawns) runs under a temporary HOME, with
+// the vault off unless a suite sets its own: tests never write to the real
+// ~/.claude (state, stats, event log) nor to the real vault or its history.
+process.env.HOME = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ccx-home-')));
+fs.mkdirSync(path.join(process.env.HOME, '.claude'), { recursive: true });
+if (!process.env.CC_VAULT) process.env.CC_VAULT_DISABLED = '1';
+
 const DISPATCH = path.join(__dirname, 'hooks', 'dispatch.js');
 let pass = 0, fail = 0;
 const groups = [];
@@ -397,4 +404,4 @@ fs.rmSync(TMP, { recursive: true, force: true });
 
 // ---------------------------------------------------------------- résultat, puis suites compression, vault, thèmes
 console.log(`\n  ${pass} réussis, ${fail} échoués sur ${pass + fail}\n`);
-process.exit(fail || ['test-compress.js', 'test-compress-engine.js', 'test-vault.js', 'test-themes.js', 'test-guards.js', 'test-status.js', 'test-port.js'].map((f) => spawnSync('node', [path.join(__dirname, f)], { stdio: 'inherit' }).status).some(Boolean) ? 1 : 0);
+process.exit(fail || ['test-compress.js', 'test-compress-engine.js', 'test-vault.js', 'test-themes.js', 'test-guards.js', 'test-status.js', 'test-port.js', 'test-vault-history.js'].map((f) => spawnSync('node', [path.join(__dirname, f)], { stdio: 'inherit' }).status).some(Boolean) ? 1 : 0);
