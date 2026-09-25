@@ -133,8 +133,18 @@ function checkPython() {
   return [ok ? item('OK', 'Moteur token-saver', ok) : item('WARN', 'Moteur token-saver', 'aucun python >= 3.10 : compression Node seule')];
 }
 
+/** Vault history: present and recent when the vault is on. */
+function checkVaultHistory() {
+  const store = require(path.join(REPO, 'hooks', 'lib', 'vault', 'store.js'));
+  if (!store.vaultStatus().ok) return [item('OK', 'Historique vault', 'vault inactif')];
+  if (String(process.env.CC_VAULT_HISTORY || '').toLowerCase() === 'off') return [item('WARN', 'Historique vault', 'coupé (CC_VAULT_HISTORY=off)')];
+  const s = require(path.join(REPO, 'hooks', 'lib', 'vault', 'history.js')).summary();
+  if (!s) return [item('WARN', 'Historique vault', 'aucun commit encore (créé au prochain Stop)')];
+  return [item('OK', 'Historique vault', `${s.commits} commit(s), dernier ${s.last.slice(0, 16).replace('T', ' ')}`)];
+}
+
 function runChecks() {
-  return [checkLinks, checkSettings, checkPlugin, checkRepo, checkDispatch, checkPython].flatMap((f) => {
+  return [checkLinks, checkSettings, checkPlugin, checkRepo, checkDispatch, checkPython, checkVaultHistory].flatMap((f) => {
     try { return f(); } catch (e) { return [item('FAIL', f.name, e.message)]; }
   });
 }

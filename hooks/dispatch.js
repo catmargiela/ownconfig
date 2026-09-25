@@ -26,14 +26,16 @@ const EVENTS = {
   'post-edit': ['./lib/post-edit'],
   // La capture vault passe AVANT les gates : ce qui doit être mémorisé l'est,
   // même si un gate interrompt ensuite la fin de réponse.
-  'pre-compact': ['./lib/vault#onCompact'],
+  'pre-compact': ['./lib/vault#onCompact', './lib/vault/history#onCompact'],
   // Un seul module interrompt par passage (sortie 2) : le typecheck d'abord, puis
   // les compagnons, puis le contexte. Les suivants reprennent au Stop d'après.
   // delivery-check (avertit) et la notification passent en DERNIER : ils ne
   // tournent que si aucun gate n'a renvoyé l'agent au travail.
-  'stop': ['./lib/vault#onStop', './lib/stop-quality', './lib/companion-check', './lib/context-monitor',
+  // L'historique du vault commite juste après la capture, avant tout gate.
+  'stop': ['./lib/vault#onStop', './lib/vault/history#onStop', './lib/stop-quality', './lib/companion-check', './lib/context-monitor',
     './lib/delivery-check', './lib/turn-timer#onStop'],
-  'session-start': ['./lib/vault#onStart'],
+  // Le bilan hebdo n'écrit rien sur stdout : seul vault#onStart est injecté.
+  'session-start': ['./lib/vault/weekly#onStart', './lib/vault#onStart'],
   // Chaque message de l'utilisateur : alerte de quota (limites copiées par la status bar).
   'prompt': ['./lib/quota-alert', './lib/turn-timer#onPrompt'],
 };

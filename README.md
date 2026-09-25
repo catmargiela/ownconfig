@@ -163,14 +163,44 @@ Le contexte d'une session disparaît à la compaction. Le vault est ce qui reste
 │   └── Stack.md
 ├── Projets/<Projet>.md      ← injectée sur ce projet uniquement
 ├── Journal/<date> — <Projet>.md
+├── Journal/Hebdo/<AAAA-Wnn>.md ← bilan de la semaine écoulée
 └── Tableau de bord.md       ← dernières sessions + bilan de la compression
 ```
 
 | Moment | Ce qui se passe |
 |---|---|
-| `SessionStart` | injecte le profil + la page projet + les derniers résultats, sous budget |
-| `PreCompact` | écrit l'état dans le journal du jour **avant** que le contexte soit perdu |
-| `Stop` | met à jour le bloc de la session (dès la première édition), la page projet et le tableau de bord |
+| `SessionStart` | écrit le bilan de la semaine écoulée s'il manque ; injecte le profil + la page projet + les derniers résultats, sous budget |
+| `PreCompact` | écrit l'état dans le journal du jour **avant** que le contexte soit perdu, puis un commit d'historique |
+| `Stop` | met à jour le bloc de la session (dès la première édition), la page projet et le tableau de bord, puis un commit d'historique |
+
+**Historique.** Le dossier `Claude/` est versionné par un dépôt git **hors du
+vault** (`~/.claude/state/vault-history.git`, `Claude/` comme arbre de travail) :
+aucun `.git` dans le vault, donc rien que voient Obsidian ou une synchro cloud.
+Un commit à chaque Stop et à chaque compaction quand quelque chose a changé, y
+compris tes propres modifications entre deux tours. Local uniquement : aucun
+remote, rien n'est poussé. Pour voir ou restaurer une note :
+
+```bash
+H=(--git-dir ~/.claude/state/vault-history.git --work-tree ~/Documents/Obsidian\ Vault/Claude)
+git "${H[@]}" log --oneline -- Projets/mijnconfig.md      # ses versions
+git "${H[@]}" show <commit>:Projets/mijnconfig.md         # une version passée
+git "${H[@]}" restore --source <commit> -- Projets/mijnconfig.md
+```
+
+`CC_VAULT_HISTORY=off` pour couper. `config-doctor` affiche le nombre de commits
+et la date du dernier.
+
+**Bilan hebdo.** Au premier démarrage d'une nouvelle semaine, `Journal/Hebdo/<AAAA-Wnn>.md`
+résume la semaine écoulée : sessions par projet, notes du vault modifiées (tirées
+de l'historique), compression (commandes, caractères et tokens économisés,
+commandes les plus rentables), garde-fous déclenchés. Écrit une seule fois,
+jamais pour une semaine vide ; ensuite le fichier est à toi. `CC_VAULT_WEEKLY=off`
+pour couper.
+
+Les garde-fous alimentent un journal local `~/.claude/state/ccx/events.jsonl`
+(horodatage, refus ou avertissement, étiquette générique). L'étiquette s'arrête
+avant la première parenthèse, le premier deux-points ou la première commande
+citée : jamais de valeur, de chemin ni de commande complète.
 
 **Un bloc par session.** Chaque session a son propre bloc dans le journal du jour
 (`<!-- claude:session:<id> -->`), mis à jour sur place à chaque tour au lieu
@@ -534,6 +564,7 @@ répétées dans les sessions passées, pour `hookify`).
 | `tauri-release` | release Tauri v2 via tauri-action : versions, signature, `latest.json`, runners |
 | `contract-first` | un contrat d'API, un fournisseur (Go/sqlc), plusieurs clients (Next, Tauri) : changements cassants repérés, tous les côtés mis à jour ensemble |
 | `iterative-retrieval` | délégation par tours : l'agent dit ce qui lui manque au lieu de tout recevoir d'avance (2-3 tours max) |
+| `council` | décision ambiguë (architecture, lib, périmètre, livrer ou attendre) : trois sous-agents neufs — sceptique, pragmatique, critique — puis synthèse qui garde le désaccord ; l'avis initial est posé avant |
 | `golang-testing` | tests Go : table-driven, `httptest`, vrai Postgres plutôt que des mocks sqlc, fuzz, `-race` |
 | `postgres-patterns` | index, `EXPLAIN`, pagination par clé, verrous, migrations sans interruption (expand/contract, `CONCURRENTLY`, `NOT VALID`) |
 | `api-design` | enveloppe d'erreur unique, codes HTTP, pagination par curseur, idempotence, versioning additif, dates et montants |

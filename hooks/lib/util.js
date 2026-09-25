@@ -46,8 +46,40 @@ function writeState(sessionId, name, value) {
   } catch { try { fs.unlinkSync(tmp); } catch { /* ignore */ } }
 }
 
+const EVENTS_FILE = path.join(STATE_DIR, 'events.jsonl');
+const EVENTS_MAX = 512 * 1024;
+
+/**
+ * Generic label of a guard message, for the weekly digest: its tag and the text
+ * before the first `(`, `:` or backtick. Never a value, a path or a command.
+ */
+function eventLabel(msg) {
+  const first = String(msg || '').split('\n')[0];
+  const label = first.split(/[(:`]/)[0].replace(/\s+/g, ' ').trim().slice(0, 70);
+  // A bare tag ("[Bloqué]"): add the quoted command when it is short and plain.
+  const quoted = /^\[[^\]]+\]$/.test(label) && first.match(/`([\w .=-]{1,30})`/);
+  return quoted ? `${label} ${quoted[1]}` : label;
+}
+
+/** One JSONL line per refusal or warning (`events.jsonl`, halved past 512 KB). Silent on failure. */
+function recordEvent(kind, msg) {
+  const label = eventLabel(msg);
+  if (!label) return;
+  try {
+    ensureDir(STATE_DIR);
+    fs.appendFileSync(EVENTS_FILE, JSON.stringify({ ts: new Date().toISOString(), kind, label }) + '\n');
+    if (fs.statSync(EVENTS_FILE).size > EVENTS_MAX) {
+      const lines = fs.readFileSync(EVENTS_FILE, 'utf8').split('\n').filter(Boolean);
+      const tmp = `${EVENTS_FILE}.tmp.${process.pid}`;
+      fs.writeFileSync(tmp, lines.slice(Math.floor(lines.length / 2)).join('\n') + '\n');
+      fs.renameSync(tmp, EVENTS_FILE);
+    }
+  } catch { /* the log never matters more than the hook */ }
+}
+
 /** Block the tool call and hand `reason` back to Claude. */
 function deny(reason) {
+  recordEvent('deny', reason);
   process.stderr.write(reason + '\n');
   process.exit(2);
 }
@@ -59,7 +91,9 @@ function deny(reason) {
 const warnings = [];
 
 function warn(msg) {
-  if (msg && !warnings.includes(msg)) warnings.push(msg);
+  if (!msg || warnings.includes(msg)) return;
+  warnings.push(msg);
+  recordEvent('warn', msg);
 }
 
 /**
@@ -184,5 +218,5 @@ function tilde(p) {
 module.exports = {
   profile, enabled, readState, writeState, deny, warn, updateInput, flushOutput,
   flushWarnings: flushOutput, newTexts,
-  findUp, gitRoot, run, tilde, ensureDir, STATE_DIR,
+  findUp, gitRoot, run, tilde, ensureDir, STATE_DIR, EVENTS_FILE, eventLabel, recordEvent,
 };
