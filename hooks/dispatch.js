@@ -57,8 +57,17 @@ process.stdin.on('end', () => {
   let input = {};
   try { input = raw ? JSON.parse(raw) : {}; } catch { /* entrée illisible : on continue */ }
 
+  // Modules the ccx plugin already ran in-process for this very call (lib/native.js).
+  let native = new Set();
+  try {
+    native = require('./lib/native').nativeModules(input.tool_use_id);
+  } catch (err) {
+    if (process.env.CCX_DEBUG === '1') process.stderr.write(`[ccx:${event}] native: ${err.message}\n`);
+  }
+
   for (const spec of modules) {
     const [id, fn = 'run'] = spec.split('#');
+    if (native.has(id)) continue;
     try {
       const mod = require(id);
       if (typeof mod[fn] === 'function') mod[fn](input);

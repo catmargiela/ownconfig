@@ -8,6 +8,11 @@
       "name": "rebenga",
       "source": "./plugins/rebenga",
       "description": "Commandes, agents et skills de travail : plan, TDD, build, refactor, revues Go/Python/TS/SQL, e2e, budget de contexte."
+    },
+    {
+      "name": "ccx",
+      "source": "./plugins/ccx",
+      "description": "Garde-fous ccx en hooks natifs (phase 1 : secrets, contournement git, commandes destructives, serveurs de dev, configs de lint, hygiène Bash, boucles)."
     }
   ],
   "metadata": {
