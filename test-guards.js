@@ -175,8 +175,27 @@ fs.writeFileSync(path.join(ACKS, 'toolu_f.json'), '{oops');
 check('accusé illisible : tout tourne', call('toolu_f', 'git push --force origin main').code, 2);
 check('id hors charset : reste dans native/', require('./hooks/lib/native').ackPath('../../x').endsWith(`${path.sep}native${path.sep}x.json`), true);
 const portedIds = fs.readFileSync(path.join(__dirname, 'plugins', 'ccx', 'hooks', 'marker.ts'), 'utf8')
-  .match(/'\.\/lib\/[\w-]+'/g).map((s) => s.slice(1, -1));
+  .match(/'\.\/lib\/[\w#-]+'/g).map((s) => s.slice(1, -1));
 check('marker.ts et native.js listent les mêmes modules', portedIds, [...PORTED]);
+
+group('Plugin natif : Stop et UserPromptSubmit, accusés par prompt_id');
+const { ackKey } = require('./hooks/lib/native');
+check('clés par événement', [
+  ackKey('pre-bash', { tool_use_id: 'toolu_1' }), ackKey('stop', { prompt_id: 'p1' }),
+  ackKey('prompt', { prompt_id: 'p1' }), ackKey('stop', {}), ackKey('post-edit', { tool_use_id: 'toolu_1' }),
+], ['toolu_1', 'stop-p1', 'prompt-p1', null, null]);
+const said = path.join(TMP, 'said.jsonl');
+fs.writeFileSync(said, JSON.stringify({ message: { role: 'assistant',
+  content: [{ type: 'text', text: 'Corrigé. Le reste est un bug préexistant.' }] } }) + '\n');
+const stopEv = (id, promptId) => hook('stop', { session_id: id, prompt_id: promptId, cwd: TMP,
+  hook_event_name: 'Stop', transcript_path: said }, { CC_CONTEXT_MONITOR: 'off', CCX_NOTIFY: 'off' });
+check('Stop sans accusé : delivery-check tourne', /\[Livraison\]/.test(stopEv('nat-stop-1', 'p1').out), true);
+ack('stop-p2', ['./lib/context-monitor', './lib/delivery-check', './lib/turn-timer#onStop']);
+check('Stop acquitté : delivery-check sauté', stopEv('nat-stop-2', 'p2').out, '');
+ack('stop-p3', ['./lib/delivery-check']);
+check('accusé Stop sous une autre clé : ignoré', /\[Livraison\]/.test(stopEv('nat-stop-3', 'p4').out), true);
+ack('toolu_g', ['./lib/delivery-check']);
+check('accusé PreToolUse ne couvre pas Stop', /\[Livraison\]/.test(stopEv('nat-stop-4', 'toolu_g').out), true);
 
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(`\n  Gardes : ${pass} réussis, ${fail} échoués sur ${pass + fail}\n`);

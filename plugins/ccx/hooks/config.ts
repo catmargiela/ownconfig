@@ -46,6 +46,51 @@ export function isOn(flags: Flags, profiles: readonly Profile[]): boolean {
   return !flags.isDisabled && profiles.includes(flags.profile)
 }
 
+/** Raw environment values the end-of-turn modules read (context, quota, delivery, notification). */
+export type TurnEnv = Env & {
+  contextMonitor?: string
+  contextLimit?: string
+  contextWarn?: string
+  contextSoft?: string
+  quotaAlert?: string
+  quotaWarn?: string
+  deliveryCheck?: string
+  notify?: string
+  notifyAfter?: string
+}
+
+export type TurnFlags = Flags & {
+  isContextMonitorOff: boolean
+  /** CC_CONTEXT_LIMIT, or 0 to use the window the API reports. */
+  contextLimit: number
+  warnAt: number
+  soft: number
+  isQuotaOff: boolean
+  quotaWarn: string | undefined
+  isDeliveryOff: boolean
+  isNotifyOff: boolean
+  notifyAfter: string | undefined
+}
+
+const isOff = (raw: string | undefined): boolean => String(raw ?? '').trim().toLowerCase() === 'off'
+
+export function toTurnFlags(env: TurnEnv): TurnFlags {
+  const limit = Number(env.contextLimit)
+  return {
+    ...toFlags(env),
+    // ccx compares to 'off' exactly here, unlike its other switches.
+    isContextMonitorOff: env.contextMonitor === 'off',
+    contextLimit: limit > 0 ? limit : 0,
+    warnAt: Number(env.contextWarn) || 0.7,
+    soft: Number(env.contextSoft) || 150000,
+    isQuotaOff: isOff(env.quotaAlert),
+    quotaWarn: env.quotaWarn,
+    isDeliveryOff: isOff(env.deliveryCheck),
+    isNotifyOff: isOff(env.notify),
+    notifyAfter: env.notifyAfter,
+  }
+}
+
 /** Never leak an absolute home path into a message shown to the model. */
 export function tilde(path: string, home: string): string {
   if (!path) return ''

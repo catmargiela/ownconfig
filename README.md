@@ -115,7 +115,7 @@ seul JSON (`systemMessage` pour toi, `additionalContext` pour le modèle), une
 fois par cible et par session. Une réécriture de commande (`updatedInput`) passe
 par ce même JSON, jamais accompagnée d'une décision de permission.
 
-### Plugin `ccx` : les hooks en natif (phase 1)
+### Plugin `ccx` : les hooks en natif (phases 1 et 2)
 
 `plugins/ccx/` porte six modules dans un plugin à hooks natifs, exécutés dans le
 process de Claude Code plutôt que par un `node dispatch.js` à chaque appel
@@ -152,6 +152,23 @@ pour un appel futur ; et seuls les ids de `PORTED` peuvent être sautés.
 Différence visible : un avertissement s'affiche comme une ligne grisée du
 transcript (`$.ui.log`) au lieu du `systemMessage`, et le modèle le reçoit
 toujours en `additionalContext`.
+
+**Phase 2 : fin de réponse et prompt.** `context-monitor`, `delivery-check` et
+`turn-timer` (Stop), `quota-alert` et le départ du chronomètre (UserPromptSubmit)
+tournent aussi dans le plugin, sur les données de l'API plutôt que sur des copies :
+
+| Module | Avant | En natif |
+|---|---|---|
+| `context-monitor` | tokens estimés (caractères / 4) en relisant le transcript, fenêtre devinée d'après le nom du modèle | tokens et fenêtre réels de la dernière réponse (`$.session.usage()`) ; l'alerte part donc un peu plus tôt, prompt système et outils compris ; plus de paragraphe sur le nombre d'images |
+| `quota-alert` | `state/ccx/limits.json` copié par la barre de statut | limites de la dernière réponse API |
+| `delivery-check` | 256 derniers Ko du transcript | `last_assistant_message` de l'événement Stop |
+| `turn-timer` | `osascript` détaché | `osascript` borné à 5 s ; macOS reconnu à la présence de `/usr/bin/osascript` |
+
+L'ordre du Stop est gardé : `stop-quality` et `companion-check` (encore dans
+`dispatch.js`) passent d'abord ; si l'un renvoie l'agent au travail, rien d'autre
+ne tourne. Les accusés de ces deux événements sont `stop-<prompt_id>` et
+`prompt-<prompt_id>`. Un `/clear` remet toute la mémoire de session à zéro, une
+compaction les seuls avertissements de contexte.
 
 Vérifier : `claude plugin validate plugins/ccx` et `claude plugin test
 plugins/ccx` (le runner de Claude Code ; non lancé par `node test.js`, qui

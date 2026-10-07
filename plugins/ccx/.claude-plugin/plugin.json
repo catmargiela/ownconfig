@@ -1,7 +1,7 @@
 {
   "name": "ccx",
-  "description": "Native port of the ccx hooks, phase 1: secret, git-bypass, destructive-command, dev-server and guardrail-config gates, plus bash hygiene and loop warnings, run in-process instead of a node spawn per tool call.",
-  "version": "0.1.0",
+  "description": "Native port of the ccx hooks: secret, git-bypass, destructive-command, dev-server and guardrail-config gates, bash hygiene and loop warnings (phase 1); context, quota and delivery checks and the long-turn notification on the API's own figures (phase 2).",
+  "version": "0.2.0",
   "author": { "name": "catmargiela" },
   "types": "./types/index.d.ts"
 }
