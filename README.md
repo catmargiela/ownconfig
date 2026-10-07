@@ -115,6 +115,48 @@ seul JSON (`systemMessage` pour toi, `additionalContext` pour le modèle), une
 fois par cible et par session. Une réécriture de commande (`updatedInput`) passe
 par ce même JSON, jamais accompagnée d'une décision de permission.
 
+### Plugin `ccx` : les hooks en natif (phase 1)
+
+`plugins/ccx/` porte six modules dans un plugin à hooks natifs, exécutés dans le
+process de Claude Code plutôt que par un `node dispatch.js` à chaque appel
+d'outil : `secret-guard`, `pre-bash`, `dev-server-guard`, `pre-edit`,
+`bash-hygiene`, `loop-guard`. Mêmes règles, mêmes messages, mêmes profils et
+mêmes variables (`CC_PROFILE`, `CCX_DISABLED`, `CCX_ALLOW_CONFIG`,
+`CCX_LOOP_GUARD`).
+
+```bash
+claude plugin marketplace add ~/.claude-config
+claude plugin install ccx@ownconfig
+```
+
+Le plugin s'accroche à `classic.PreToolUse`, au-dessus des hooks de settings, en
+deux temps pour garder l'ordre du dispatcher avec les modules pas encore portés :
+
+1. **avant** les hooks de settings, les refus (secret, contournement git,
+   force-push, `curl | sh`, commande destructive, serveur au premier plan,
+   config de lint) ;
+2. **après**, seulement si rien en dessous n'a refusé (`commit-gate`,
+   `migration-guard`), le fact-forcing `strict`, l'hygiène Bash et la boucle :
+   un refus de `commit-gate` ne consomme ni avertissement ni compteur.
+
+**Relais avec `dispatch.js`.** Pour qu'un contrôle ne tourne pas deux fois, le
+plugin acquitte chaque appel qu'il a évalué sans erreur en écrivant
+`~/.claude/state/ccx/native/<tool_use_id>.json` juste avant les hooks de
+settings ; `dispatch.js` saute alors les modules portés pour **cet appel
+seulement** et efface le fichier (`hooks/lib/native.js`). Sans accusé — plugin
+absent, en erreur, outil non géré — tout tourne dans `dispatch.js` : le pire cas
+est un contrôle en double, jamais un contrôle absent. Un `tool_use_id` est
+aléatoire et attribué après coup, donc une commande ne peut pas en forger un
+pour un appel futur ; et seuls les ids de `PORTED` peuvent être sautés.
+
+Différence visible : un avertissement s'affiche comme une ligne grisée du
+transcript (`$.ui.log`) au lieu du `systemMessage`, et le modèle le reçoit
+toujours en `additionalContext`.
+
+Vérifier : `claude plugin validate plugins/ccx` et `claude plugin test
+plugins/ccx` (le runner de Claude Code ; non lancé par `node test.js`, qui
+couvre le relais côté `dispatch.js`).
+
 ### Le fact-forcing
 
 Demander « tu es sûr ? » à un modèle ne produit rien : il répond oui. Le hook ne

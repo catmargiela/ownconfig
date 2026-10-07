@@ -153,6 +153,31 @@ check('après `cd x &&` : silence', unmatchedGlobs('cd sub && ls *.zzz', emptyDi
 check('après `pushd x;` : silence', unmatchedGlobs('pushd sub; ls *.zzz', emptyDir), []);
 check('`cd` cité dans un message : pas une commande', unmatchedGlobs('git commit -m "cd x" && ls *.zzz', emptyDir), ['*.zzz']);
 
+group('Plugin natif : dispatch.js saute les modules portés pour un appel acquitté (lib/native.js)');
+const ACKS = mk('home', '.claude', 'state', 'ccx', 'native');
+const ack = (toolUseId, skip) => fs.writeFileSync(path.join(ACKS, `${toolUseId}.json`), JSON.stringify({ skip }));
+const call = (toolUseId, command, cwd = proj) => hook('pre-bash', { session_id: 'nat', tool_use_id: toolUseId, cwd,
+  tool_name: 'Bash', tool_input: { command } });
+const { PORTED } = require('./hooks/lib/native');
+check("sans accusé : tout tourne", call('toolu_none', 'git push --force origin main').code, 2);
+ack('toolu_a', [...PORTED]);
+check('accusé du même appel : module sauté', call('toolu_a', 'git push --force origin main').code, 0);
+check("l'accusé est consommé", fs.existsSync(path.join(ACKS, 'toolu_a.json')), false);
+check('rejoué sans accusé : tout tourne', call('toolu_a', 'git push --force origin main').code, 2);
+ack('toolu_b', [...PORTED]);
+check("accusé d'un autre appel : ignoré", call('toolu_c', 'git push --force origin main').code, 2);
+ack('toolu_d', []);
+check('accusé vide : tout tourne', call('toolu_d', 'git push --force origin main').code, 2);
+ack('toolu_e', [...PORTED, './lib/compress', './lib/commit-gate']);
+const kept = call('toolu_e', 'git log', r4);
+check('module non porté réclamé : jamais sauté (compress réécrit)', [kept.code, /updatedInput/.test(kept.out)], [0, true]);
+fs.writeFileSync(path.join(ACKS, 'toolu_f.json'), '{oops');
+check('accusé illisible : tout tourne', call('toolu_f', 'git push --force origin main').code, 2);
+check('id hors charset : reste dans native/', require('./hooks/lib/native').ackPath('../../x').endsWith(`${path.sep}native${path.sep}x.json`), true);
+const portedIds = fs.readFileSync(path.join(__dirname, 'plugins', 'ccx', 'hooks', 'marker.ts'), 'utf8')
+  .match(/'\.\/lib\/[\w-]+'/g).map((s) => s.slice(1, -1));
+check('marker.ts et native.js listent les mêmes modules', portedIds, [...PORTED]);
+
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(`\n  Gardes : ${pass} réussis, ${fail} échoués sur ${pass + fail}\n`);
 process.exit(fail ? 1 : 0);
