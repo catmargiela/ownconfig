@@ -5,7 +5,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { NATIVE_MODULES } from '../hooks/marker'
+import { NATIVE } from '../hooks/marker'
 
 type Seen = { ran: string[]; logs: string[]; writes: { path: string; text: string }[] }
 
@@ -134,7 +134,7 @@ test('each call it lets through is acknowledged for dispatch.js, a denied one is
   expect(seen.writes.length).toBe(2)
   for (const write of seen.writes) {
     expect(write.path).toMatch(/^\/home\/u\/\.claude\/state\/ccx\/native\/[\w-]+\.json$/)
-    expect(JSON.parse(write.text).skip).toEqual([...NATIVE_MODULES])
+    expect(JSON.parse(write.text).skip).toEqual([...NATIVE.preTool])
   }
   expect(seen.writes[0]?.path === seen.writes[1]?.path).toBe(false)
 })
