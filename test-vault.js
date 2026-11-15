@@ -268,6 +268,55 @@ fs.mkdirSync(path.join(VAULT, 'Claude', 'Profil'), { recursive: true });
 fs.writeFileSync(path.join(VAULT, 'Claude', 'Profil', 'Façon de coder.md'), '# Façon de coder\n\n## Par défaut\n\nPROFIL-REMPLI\n');
 check('une page de profil remplie n\'est jamais injectée', (v.buildInjection(PROJ) || '').includes('PROFIL-REMPLI'), false);
 
+group('vault-page : où écrire une note');
+const run = (script, args, env = {}) => spawnSync('node', [path.join(__dirname, script), ...args],
+  { encoding: 'utf8', env: { ...process.env, ...env } });
+const pg = run('bin/vault-page.js', [front]);
+check('page existante rendue telle quelle', [pg.status, pg.stdout.trim()], [0, shared]);
+const freshRepo = mkRepo(path.join(TMP, 'fresh-repo'));
+const first = JSON.parse(run('bin/vault-page.js', [freshRepo, '--json']).stdout);
+const again = JSON.parse(run('bin/vault-page.js', [freshRepo, '--json']).stdout);
+check('créée une fois, puis retrouvée', [first.existed, again.existed, first.page === again.page, first.paths],
+  [false, true, true, [freshRepo]]);
+const looseNote = path.join(TMP, 'loose-note');
+fs.mkdirSync(looseNote);
+const lg = run('bin/vault-page.js', [looseNote]);
+check('note délibérée hors git : page créée', [lg.status, fs.existsSync(path.join(P, 'loose-note.md'))], [0, true]);
+const refused = run('bin/vault-page.js', [HOME]);
+const refusedJournal = refused.stdout.trim();
+check('dossier personnel : sortie 1, journal du jour rendu et créé, raison donnée',
+  [refused.status, refusedJournal.startsWith(J), fs.existsSync(refusedJournal), /dossier personnel/.test(refused.stderr)],
+  [1, true, true, true]);
+check('refus : aucune page créée', fs.readdirSync(P).some((f) => /home/.test(f)), false);
+check('vault désactivé : sortie 2, rien sur stdout', (({ status, stdout }) => [status, stdout])(
+  run('bin/vault-page.js', [front], { CC_VAULT_DISABLED: '1' })), [2, '']);
+
+group('Diagnostic : vault-lint');
+const bigRepo = mkRepo(path.join(TMP, 'big-repo'));
+fs.writeFileSync(path.join(P, 'Big.md'), `---\nchemin: ${bigRepo}\n---\n\n# Big\n\n## Décisions\n\n${'Une décision. '.repeat(400)}\n`);
+const lp = run('vault-lint.js', ['--project', bigRepo]).stdout;
+check('projet : page utilisée, écrit contre injecté, coupe signalée',
+  [lp.includes('Page    : Projets/Big.md'), /5\d{3} car\. écrits, 3000 injectés/.test(lp), lp.includes('coupée au budget de 3000')],
+  [true, true, true]);
+check('projet sans page : raison donnée', run('vault-lint.js', ['--project', loose]).stdout.includes('aucune — hors dépôt git'), true);
+check('--show : texte exact injecté', run('vault-lint.js', ['--project', front, '--show']).stdout.includes('<contexte-vault>\n'), true);
+fs.writeFileSync(path.join(P, 'Orpheline.md'), '# Orpheline\n\n## Décisions\n\nPage riche sans chemin.\n');
+fs.writeFileSync(twin, `---\nchemin: ${api}\n---\n\n# AAA\n`);
+fs.writeFileSync(path.join(P, 'Interne.md'), `---\nchemin: ${internal}\n---\n\n# Interne\n`);
+const all = run('vault-lint.js', ['--verbose']).stdout;
+check('vault : page sans chemin, doublon et page hors projet signalés', [
+  /SANS `chemin:`[^\n]*\(1\)\n\s+Projets\/Orpheline\.md/.test(all),
+  all.includes('AAA, Acme → Acme est utilisée'),
+  all.includes('Projets/Interne.md : dossier interne de Claude Code'),
+], [true, true, true]);
+const A = require(path.join(LIB, 'vault', 'audit.js'));
+const outside = () => A.auditVault().horsProjet.map((h) => h.name);
+check('page vide d\'un dossier hors git : signalée', outside().includes('loose-note'), true);
+fs.appendFileSync(path.join(P, 'loose-note.md'), '\n## Notes\n\nRédigée à la main.\n');
+check('la même page une fois rédigée : plus signalée', outside().includes('loose-note'), false);
+const audit = A.auditVault();
+check('diagnostic en lecture seule : aucun fichier écrit', fs.readdirSync(P).length, audit.counts.projets);
+
 group('Robustesse et performance');
 const hook = spawnSync('node', [path.join(__dirname, 'hooks', 'dispatch.js'), 'stop'], {
   input: JSON.stringify(stopInput('sess-one', '/nonexistent.jsonl')), encoding: 'utf8',

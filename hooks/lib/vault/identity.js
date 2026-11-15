@@ -104,18 +104,19 @@ function isScratchpad(real) {
  * A page is created only for a real project: a git repository that is neither
  * the home directory, nor Claude Code's own folder, nor a session scratchpad.
  * Judged on the repository root, so a worktree stored under `~/.claude` still
- * belongs to its project.
+ * belongs to its project. `code` tells the cases apart for the diagnostic.
  */
 function canHavePage(cwd) {
-  if (!cwd) return { ok: false, why: 'aucun dossier de travail' };
+  const no = (code, why) => ({ ok: false, code, why });
+  if (!cwd) return no('none', 'aucun dossier de travail');
   const root = gitRoot(cwd);
   const real = realOr(root || cwd);
   const home = realOr(os.homedir());
-  if (real === home) return { ok: false, why: 'dossier personnel' };
-  if (inside(real, path.join(home, '.claude'))) return { ok: false, why: 'dossier interne de Claude Code' };
-  if (isScratchpad(real)) return { ok: false, why: 'dossier temporaire de session' };
-  if (!root) return { ok: false, why: 'hors dépôt git' };
-  return { ok: true, why: '' };
+  if (real === home) return no('home', 'dossier personnel');
+  if (inside(real, path.join(home, '.claude'))) return no('internal', 'dossier interne de Claude Code');
+  if (isScratchpad(real)) return no('scratchpad', 'dossier temporaire de session');
+  if (!root) return no('no-git', 'hors dépôt git');
+  return { ok: true, code: 'ok', why: '' };
 }
 
 module.exports = { declaredPaths, projectPages, candidatePages, findPage, canHavePage, realOr };

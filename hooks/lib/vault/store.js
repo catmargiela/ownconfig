@@ -14,7 +14,7 @@ const crypto = require('crypto');
 
 const VAULT = process.env.CC_VAULT || path.join(os.homedir(), 'Documents', 'Obsidian Vault');
 const ROOT = path.join(VAULT, 'Claude');
-const DIRS = { projets: path.join(ROOT, 'Projets'), journal: path.join(ROOT, 'Journal'), profil: path.join(ROOT, 'Profil') };
+const DIRS = { projets: path.join(ROOT, 'Projets'), journal: path.join(ROOT, 'Journal') };
 
 // Injection budget at session start: what separates useful memory from a tax.
 const BUDGET = {

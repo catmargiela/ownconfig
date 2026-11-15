@@ -19,13 +19,16 @@ const LEGACY_BLOCK = /^## \d{2}:\d{2} — Fin de session/gm;
  * Page of the project, created when absent. NEVER rewrites an existing page.
  * Returns null when no page exists and the folder may not have one
  * (identity.js: outside git, home, Claude Code's folder, session scratchpad).
+ * `deliberate` (a note the user asked for) lifts the git requirement only: the
+ * automatic capture never creates a page for a loose folder, a person may.
  */
-function ensureProjectPage(name, cwd) {
+function ensureProjectPage(name, cwd, deliberate = false) {
   const existing = cwd ? resolveProjectFile(cwd) : projectFile(name);
   if (fs.existsSync(existing)) return existing;
   const f = projectFile(name);
   if (fs.existsSync(f)) return f;
-  if (cwd && !canHavePage(cwd).ok) return null;
+  const can = cwd ? canHavePage(cwd) : { ok: true };
+  if (!can.ok && !(deliberate && can.code === 'no-git')) return null;
   write(f, `---
 type: projet
 tags: [claude, projet]

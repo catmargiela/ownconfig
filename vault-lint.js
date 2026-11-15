@@ -1,118 +1,91 @@
 #!/usr/bin/env node
 'use strict';
 /**
- * Diagnostic du vault, orienté coût.
+ * Diagnostic du vault, orienté coût et atteignabilité.
  *
  * Un lint de vault classique cherche les liens morts. Le nôtre répond d'abord à
- * la question qui pèse sur la facture : **combien chaque projet coûte-t-il en
- * tokens au démarrage de session**, et quelles pages sont payées sans rien
- * apprendre au modèle.
+ * deux questions : chaque page est-elle retrouvée depuis les dossiers qu'elle
+ * décrit, et combien un projet coûte-t-il en tokens au démarrage de session.
+ * Lecture seule : rien n'est jamais écrit.
  *
- *   node vault-lint.js [--verbose]
+ *   node vault-lint.js [--verbose]             tout le vault
+ *   node vault-lint.js --project [dir] [--show] ce qu'une session reçoit dans `dir`
  */
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const V = require('./hooks/lib/vault');
 
-const VERBOSE = process.argv.includes('--verbose');
-const tok = (s) => Math.round((s || '').length / 4);
+const HERE = path.dirname(fs.realpathSync(__filename));
+const store = require(path.join(HERE, 'hooks', 'lib', 'vault', 'store.js'));
+const { auditVault, projectReport } = require(path.join(HERE, 'hooks', 'lib', 'vault', 'audit.js'));
+
+const ARGS = process.argv.slice(2);
+const VERBOSE = ARGS.includes('--verbose');
 const pad = (s, n) => String(s).padEnd(n);
+const tilde = (p) => String(p).replace(os.homedir(), '~');
 
-const st = V.vaultStatus();
-if (!st.ok) { console.error(`Vault inactif : ${st.why}`); process.exit(1); }
-
-function listMd(dir) {
-  try { return fs.readdirSync(dir).filter((f) => f.endsWith('.md')).map((f) => path.join(dir, f)); }
-  catch { return []; }
-}
-
-const projets = listMd(V.DIRS.projets);
-const journaux = listMd(V.DIRS.journal);
-const profils = listMd(V.DIRS.profil);
-const toutes = [...projets, ...journaux, ...profils, ...listMd(V.ROOT)];
-const nomsExistants = new Set(toutes.map((f) => path.basename(f, '.md')));
-
-const findings = { muettes: [], tronquees: [], liensCasses: [], orphelins: [], inutilisees: [], grosses: [], sansChemin: [], doublons: [] };
-
-// --- Profil : payé à CHAQUE session, sur chaque projet ---
-const profilPath = path.join(V.DIRS.profil, 'Façon de coder.md');
-const profilRaw = V.read(profilPath);
-const profilClean = V.cleanForInjection(profilRaw);
-const profilTok = tok(profilClean.slice(0, V.BUDGET.profil));
-if (!profilClean) findings.muettes.push(['Profil/Façon de coder.md', 'aucun contenu réel — injecte 0 alors que c\'est le fichier le plus rentable']);
-if (profilClean.length > V.BUDGET.profil) findings.tronquees.push(['Profil/Façon de coder.md', profilClean.length, V.BUDGET.profil]);
-
-// --- Coût par projet ---
-const couts = [];
-for (const f of projets) {
-  const nom = path.basename(f, '.md');
-  const raw = V.read(f);
-  const clean = V.cleanForInjection(raw);
-  const chemin = (raw.match(/^chemin:\s*(.+)$/m) || [])[1] || '';
-  const injection = chemin ? V.buildInjection(chemin.trim()) : null;
-
-  if (!chemin) {
-    findings.sansChemin.push(`Projets/${nom}.md`);
-  } else {
-    const resolue = path.basename(V.resolveProjectFile(chemin.trim()), '.md');
-    if (resolue !== nom) findings.doublons.push([`Projets/${nom}.md`, `${resolue}.md`]);
-  }
-  if (!clean) findings.muettes.push([`Projets/${nom}.md`, 'que des placeholders — n\'injecte rien']);
-  if (clean.length > V.BUDGET.projet) findings.tronquees.push([`Projets/${nom}.md`, clean.length, V.BUDGET.projet]);
-  if (!V.readRegion(raw, 'journal').trim()) findings.inutilisees.push(`Projets/${nom}.md`);
-  if (raw.length > 12000) findings.grosses.push([`Projets/${nom}.md`, raw.length]);
-
-  couts.push({ nom, total: tok(injection), projet: tok(clean.slice(0, V.BUDGET.projet)), muette: !clean });
-}
-
-// --- Liens cassés, toutes pages confondues ---
-for (const f of toutes) {
-  const rel = path.relative(V.ROOT, f);
-  for (const m of V.read(f).matchAll(/\[\[([^\]|#]+)/g)) {
-    const cible = m[1].trim();
-    if (cible && !nomsExistants.has(cible)) findings.liensCasses.push([rel, cible]);
-  }
-}
-
-// --- Journaux sans page projet ---
-const nomsProjets = new Set(projets.map((f) => path.basename(f, '.md')));
-for (const f of journaux) {
-  const m = path.basename(f, '.md').match(/—\s*(.+)$/);
-  if (m && !nomsProjets.has(m[1].trim())) findings.orphelins.push(path.relative(V.ROOT, f));
-}
-
-// ------------------------------------------------------------------ rapport
-console.log(`\n  Vault : ${V.ROOT.replace(os.homedir(), '~')}`);
-console.log(`  ${projets.length} projet(s), ${journaux.length} journal/journaux, ${toutes.length} page(s) au total\n`);
-
-console.log('  COÛT AU DÉMARRAGE DE SESSION');
-console.log(`  ${pad('projet', 26)} ${pad('total', 9)} dont page projet`);
-console.log('  ' + '─'.repeat(56));
-console.log(`  ${pad('(profil, tous projets)', 26)} ${pad('~' + profilTok + ' tok', 9)} —`);
-for (const c of couts.sort((a, b) => b.total - a.total)) {
-  console.log(`  ${pad(c.nom.slice(0, 25), 26)} ${pad('~' + c.total + ' tok', 9)} ~${c.projet} tok${c.muette ? '   ⚠ muette' : ''}`);
-}
-if (!couts.length) console.log('  (aucune page projet — elles se créent à la première compaction ou fin de session)');
-
-const bloc = (titre, items, fmt) => {
+function bloc(titre, items, fmt) {
   if (!items.length) return;
   console.log(`\n  ${titre} (${items.length})`);
   const vus = VERBOSE ? items : items.slice(0, 8);
   for (const it of vus) console.log('    ' + fmt(it));
   if (items.length > vus.length) console.log(`    … +${items.length - vus.length} (--verbose)`);
-};
+}
 
-bloc('PAGES SANS `chemin:` — jamais retrouvées si tu les renommes', findings.sansChemin, (f) => f);
-bloc('DOUBLONS — deux pages pour le même dossier', findings.doublons, ([a, b]) => `${a} pointe le même dossier que ${b}`);
-bloc('PAGES MUETTES — payées à la lecture, injectent zéro', findings.muettes, ([f, why]) => `${f} : ${why}`);
-bloc('PAGES TRONQUÉES — écrit mais jamais injecté', findings.tronquees, ([f, a, b]) => `${f} : ${a} car. pour un budget de ${b}`);
-bloc('PAGES VOLUMINEUSES — relire et élaguer', findings.grosses, ([f, n]) => `${f} : ${n} car.`);
-bloc('LIENS CASSÉS', findings.liensCasses, ([f, c]) => `${f} → [[${c}]]`);
-bloc('JOURNAUX ORPHELINS — page projet absente', findings.orphelins, (f) => f);
-bloc('PAGES PROJET JAMAIS UTILISÉES — aucune session enregistrée', findings.inutilisees, (f) => f);
+function printProject(dir) {
+  const r = projectReport(dir);
+  console.log(`\n  Dossier : ${tilde(r.dir)}`);
+  if (r.page) {
+    console.log(`  Page    : Projets/${r.name}.md`);
+    console.log(`  Couvre  : ${r.paths.length ? r.paths.map(tilde).join(', ') : '(aucun `chemin:` — trouvée par son nom seulement)'}`);
+    console.log(`  Contenu : ${r.written} car. écrits, ${r.injected} injectés` +
+      (r.truncated ? `  ⚠ coupée au budget de ${r.budget}` : ''));
+  } else {
+    console.log(`  Page    : aucune${r.canHavePage.ok ? ' (créée à la première session qui édite un fichier)' : ` — ${r.canHavePage.why}`}`);
+  }
+  if (r.conflict.length > 1) console.log(`  ⚠ Doublon : ${r.conflict.join(', ')} déclarent ce dossier ; ${r.name} est utilisée`);
+  console.log(`  Dernière session : ${r.lastSession ? 'injectée' : 'aucune'}`);
+  console.log(`  Coût au démarrage : ~${r.startTokens} tokens`);
+  if (ARGS.includes('--show')) console.log(`\n${r.injection || '  (rien n\'est injecté)'}`);
+  else console.log('\n  --show pour voir le texte exact injecté.');
+  console.log('');
+}
 
-const total = Object.values(findings).reduce((n, a) => n + a.length, 0);
-const pire = couts.length ? Math.max(...couts.map((c) => c.total)) : 0;
-console.log(`\n  ${total === 0 ? 'Aucun problème détecté.' : total + ' point(s) à regarder.'}`);
-console.log(`  Session la plus chère : ~${pire + profilTok} tokens de contexte injecté.\n`);
+function printVault() {
+  const a = auditVault();
+  console.log(`\n  Vault : ${tilde(store.ROOT)}`);
+  console.log(`  ${a.counts.projets} projet(s), ${a.counts.journaux} journal/journaux\n`);
+
+  console.log('  COÛT AU DÉMARRAGE DE SESSION');
+  console.log(`  ${pad('projet', 26)} ${pad('total', 11)} page (écrit → injecté)`);
+  console.log('  ' + '─'.repeat(62));
+  for (const p of [...a.pages].sort((x, y) => y.startTokens - x.startTokens)) {
+    console.log(`  ${pad(p.name.slice(0, 25), 26)} ${pad('~' + p.startTokens + ' tok', 11)} ${p.written} → ${p.injected} car.` +
+      (p.paths.length ? '' : '   ⚠ jamais injectée'));
+  }
+  if (!a.pages.length) console.log('  (aucune page projet — elles se créent à la première session qui édite un fichier)');
+
+  bloc('PAGES SANS `chemin:` — jamais injectées', a.sansChemin, (n) => `Projets/${n}.md`);
+  bloc('DOUBLONS — plusieurs pages pour un même dossier', a.doublons, (d) => `${d.pages.join(', ')} → ${d.winner} est utilisée`);
+  bloc('PAGES HORS PROJET — dossier qui ne devrait pas avoir de page', a.horsProjet, (p) => `Projets/${p.name}.md : ${p.why}`);
+  bloc('PAGES MUETTES — que des placeholders, injectent zéro', a.muettes, (n) => `Projets/${n}.md`);
+  bloc('PAGES TRONQUÉES — écrit mais pas injecté en entier', a.tronquees, (p) => `Projets/${p.name}.md : ${p.written} car. pour un budget de ${a.budget}`);
+  bloc('PAGES VOLUMINEUSES — relire et élaguer', a.grosses, (p) => `Projets/${p.name}.md : ${p.raw} car.`);
+  bloc('LIENS CASSÉS', a.liensCasses, (l) => `${l.page} → [[${l.target}]]`);
+  bloc('PAGES PROJET SANS SESSION ENREGISTRÉE', a.inutilisees, (n) => `Projets/${n}.md`);
+
+  const total = a.sansChemin.length + a.doublons.length + a.horsProjet.length + a.muettes.length +
+    a.tronquees.length + a.grosses.length + a.liensCasses.length + a.inutilisees.length;
+  const pire = a.pages.length ? Math.max(...a.pages.map((p) => p.startTokens)) : 0;
+  console.log(`\n  ${total === 0 ? 'Aucun problème détecté.' : total + ' point(s) à regarder.'}`);
+  console.log(`  Session la plus chère : ~${pire} tokens de contexte injecté.\n`);
+}
+
+const st = store.vaultStatus();
+if (!st.ok) { console.error(`Vault inactif : ${st.why}`); process.exit(1); }
+
+const at = ARGS.indexOf('--project');
+if (at >= 0) {
+  const next = ARGS[at + 1];
+  printProject(path.resolve(next && !next.startsWith('--') ? next : process.cwd()));
+} else printVault();
