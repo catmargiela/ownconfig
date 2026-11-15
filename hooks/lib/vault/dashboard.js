@@ -84,8 +84,10 @@ function compressionLine(stats) {
 }
 
 function renderDashboard(sessions, stats) {
+  // A folder without project page has a journal but nothing to link to.
+  const projet = (name) => (fs.existsSync(path.join(DIRS.projets, `${name}.md`)) ? `[[${name}]]` : name);
   const lines = sessions.map((s) =>
-    `- ${s.date} ${s.start}–${s.end} · [[${s.projet}]] — ${s.headline || '_sans résultat_'} · [[${s.journal}|journal]]`);
+    `- ${s.date} ${s.start}–${s.end} · ${projet(s.projet)} — ${s.headline || '_sans résultat_'} · [[${s.journal}|journal]]`);
   return ['## Dernières sessions', '', ...(lines.length ? lines : ['_Aucune session enregistrée._']),
     '', compressionLine(stats)].join('\n');
 }

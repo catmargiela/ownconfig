@@ -4,7 +4,7 @@
  *
  *   PreCompact   → writes the session into the vault BEFORE the context is lost
  *   Stop         → incremental capture, one block per session updated in place
- *   SessionStart → re-injects the profile + project page + latest results, under budget
+ *   SessionStart → re-injects the project page + latest results, under budget
  *
  * Absolute rule: hooks only write inside `<!-- claude:xxx:start -->` …
  * `<!-- claude:xxx:end -->` regions (plus the journal frontmatter keys they own).
@@ -51,9 +51,10 @@ function sessionJournal(acc, name) {
 /** Writes journal block, project page entry and dashboard. Returns the new accumulator. */
 function record(acc, input, root, sid) {
   store.ensureDirs();
-  const name = naming.projectName(input.cwd);
-  const pageFile = pages.ensureProjectPage(name, input.cwd);
-  const page = path.basename(pageFile, '.md');
+  // The journal goes by the page's name; a folder without page keeps its own.
+  const pageFile = pages.ensureProjectPage(naming.projectName(input.cwd), input.cwd);
+  const page = pageFile ? path.basename(pageFile, '.md') : null;
+  const name = page || naming.projectName(input.cwd);
   const journal = sessionJournal(acc, name);
   const fallbackBranch = naming.currentBranch(input.cwd);
   const body = render.renderSession(acc, {
@@ -62,7 +63,9 @@ function record(acc, input, root, sid) {
   });
   const branches = acc.branches.length ? acc.branches : [fallbackBranch].filter(Boolean);
   pages.writeSession(journal, { sid, body, name, page, branches });
-  const entry = pages.updateProjectEntries(pageFile, path.basename(journal, '.md'), render.sessionHeadline(acc), acc.entry);
+  const entry = pageFile
+    ? pages.updateProjectEntries(pageFile, path.basename(journal, '.md'), render.sessionHeadline(acc), acc.entry)
+    : acc.entry;
   dashboard.updateDashboard();
   return { ...acc, journal, entry };
 }
@@ -111,7 +114,7 @@ function distill(entries, root = null) {
 module.exports = {
   onCompact, onStop, onStart, buildInjection: inject.buildInjection,
   VAULT: store.VAULT, ROOT: store.ROOT, DIRS: store.DIRS, BUDGET: store.BUDGET,
-  projectName: naming.projectName, projectDir: naming.projectDir, distill, isUserAsk: filters.isUserAsk,
+  projectName: naming.projectName, projectDir: naming.projectDir, memoryName: naming.memoryName, distill, isUserAsk: filters.isUserAsk,
   upsertRegion: store.upsertRegion, cleanForInjection: inject.cleanForInjection, tailSections: inject.tailSections,
   readRegion: store.readRegion, stripRegions: store.stripRegions, ensureDirs: store.ensureDirs,
   ensureProjectPage: pages.ensureProjectPage, projectFile: naming.projectFile,

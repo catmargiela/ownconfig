@@ -102,8 +102,8 @@ fs.mkdirSync(path.join(HOME, '.claude'), { recursive: true });
 fs.mkdirSync(vault);
 const inst = spawnSync(process.execPath, [path.join(ROOT, 'install.js')], { encoding: 'utf8', env: { ...ENV, CC_VAULT: vault } });
 check('installation dans le HOME temporaire', inst.status, 0);
-const doctor = () => {
-  const r = spawnSync(process.execPath, [path.join(HOME, '.claude', 'bin', 'config-doctor.js'), '--json'], { encoding: 'utf8', env: ENV });
+const doctor = (env = {}) => {
+  const r = spawnSync(process.execPath, [path.join(HOME, '.claude', 'bin', 'config-doctor.js'), '--json'], { encoding: 'utf8', env: { ...ENV, ...env } });
   let res = [];
   try { res = JSON.parse(r.stdout); } catch { /* reste vide */ }
   const by = Object.fromEntries(res.map((x) => [x.label, x.level]));
@@ -112,6 +112,13 @@ const doctor = () => {
 const fresh = doctor();
 check('installation fraîche : liens, hooks, dispatcher OK', [fresh.by.Liens, fresh.by['Hooks enregistrés'], fresh.by.Dispatcher], ['OK', 'OK', 'OK']);
 check('plugin absent : avertissement seulement, sortie 0', [fresh.by['Plugin rebenga'], fresh.code], ['WARN', 0]);
+check('vault introuvable : signalé inactif, sans alerte', fresh.by.Vault, 'OK');
+check('installation : aucune page de profil semée', fs.existsSync(path.join(vault, 'Claude', 'Profil')), false);
+check('vault sans page projet : OK', doctor({ CC_VAULT: vault }).by.Vault, 'OK');
+fs.mkdirSync(path.join(vault, 'Claude', 'Projets'), { recursive: true });
+fs.writeFileSync(path.join(vault, 'Claude', 'Projets', 'Orpheline.md'), '# Orpheline\n\n## Décisions\n\nSans chemin.\n');
+const warned = doctor({ CC_VAULT: vault });
+check('page sans chemin : avertissement, sortie 0', [warned.by.Vault, warned.code], ['WARN', 0]);
 const settingsFile = path.join(HOME, '.claude', 'settings.json');
 const settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
 const moved = JSON.parse(JSON.stringify(settings));

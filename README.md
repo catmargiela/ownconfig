@@ -44,7 +44,8 @@ retire ces liens comme les autres.
 | `hooks/` | dispatcher + contrôles + pont Obsidian + moniteur de contexte + rappel des fichiers compagnons + compression des sorties Bash (`hooks/lib/compress/`) |
 | `vendor/token-saver/` | moteur de compression [token-saver](https://github.com/ppgranger/token-saver) (Apache-2.0), `src/` non modifié, appelé par `hooks/lib/compress/ts_adapter.py` ; jamais installé, n'enregistre aucun hook (`NOTICE`) |
 | `bin/statusline.sh` | barre de statut : dossier, branche git, modèle, jauge de contexte, usage `5h N% · 7j N%`, coût, caractères économisés par la compression dans la session (`⇣12k`) ; copie les limites d'usage dans `~/.claude/state/ccx/limits.json` pour l'alerte de quota (sa seule écriture) |
-| `bin/config-doctor.js` | diagnostic en lecture seule : `~/.claude` correspond-il au dépôt ? liens, hooks enregistrés une fois chacun, `settings.json`, thème, version installée du plugin, état git (sans réseau), dispatcher qui répond, python pour token-saver. `--json` pour une sortie machine ; sortie 1 sur une erreur. Via `/rebenga:config-doctor` |
+| `bin/config-doctor.js` | diagnostic en lecture seule : `~/.claude` correspond-il au dépôt ? liens, hooks enregistrés une fois chacun, `settings.json`, thème, version installée du plugin, état git (sans réseau), dispatcher qui répond, python pour token-saver, pages du vault rattachées à un projet. `--json` pour une sortie machine ; sortie 1 sur une erreur. Via `/rebenga:config-doctor` |
+| `bin/vault-page.js` | rend la page du vault qui couvre un dossier, et la crée si le projet n'en a pas ; utilisé par la skill `vault-note` pour ne jamais choisir un nom de page. `--json` pour une sortie machine |
 | `bin/gh-mcp-headers.sh` | `headersHelper` du serveur MCP GitHub : lit le jeton de `gh` à chaque connexion, jamais écrit sur disque ; tolère un environnement vide (`HOME` déduit du compte, `gh`/`jq` trouvés par `PATH` puis Homebrew) |
 | `plugins/rebenga/` | plugin local : commandes `rebenga:*`, agents spécialisés, skills TDD et e2e (voir plus bas) |
 | `.claude-plugin/` | marketplace locale `ownconfig` qui publie le plugin |
@@ -200,9 +201,6 @@ Le contexte d'une session disparaît à la compaction. Le vault est ce qui reste
 ```
 ~/Documents/Obsidian Vault/Claude/
 ├── Index Claude.md
-├── Profil/
-│   ├── Façon de coder.md    ← injectée à CHAQUE session, tous projets
-│   └── Stack.md
 ├── Projets/<Projet>.md      ← injectée sur ce projet uniquement
 ├── Journal/<date> — <Projet>.md
 └── Tableau de bord.md       ← dernières sessions + bilan de la compression
@@ -210,7 +208,7 @@ Le contexte d'une session disparaît à la compaction. Le vault est ce qui reste
 
 | Moment | Ce qui se passe |
 |---|---|
-| `SessionStart` | injecte le profil + la page projet + les derniers résultats, sous budget |
+| `SessionStart` | injecte la page projet + les derniers résultats, sous budget |
 | `PreCompact` | écrit l'état dans le journal du jour **avant** que le contexte soit perdu |
 | `Stop` | met à jour le bloc de la session (dès la première édition), la page projet et le tableau de bord |
 
@@ -240,16 +238,48 @@ session » restent intacts. Le transcript est lu de façon incrémentale : un
 `Stop` coûte quelques millisecondes. Tests : `test-vault.js`, lancé par
 `node test.js` (vault et HOME temporaires, jamais le vrai vault).
 
-**Un projet = un dépôt git.** Le nom du projet (page et journal) vient de la
-racine du dépôt trouvée en remontant depuis le dossier de travail : un
-sous-dossier écrit dans le même journal que la racine, et un worktree — y compris
-`.claude/worktrees/*` — dans celui du dépôt principal. Une page dont le `chemin:`
-vise exactement le dossier de travail reste prioritaire ; hors dépôt git, le nom
-vient du dossier de travail comme avant. Un dépôt situé à la racine du dossier
-personnel (dotfiles) est ignoré.
+**Une page par projet, retrouvée par ses dossiers.** La clé `chemin:` du
+frontmatter liste le ou les dossiers que la page couvre — une valeur, une liste
+en ligne ou une liste en bloc — et c'est par elle seule que la page est
+retrouvée : une page sans `chemin:` n'est jamais injectée, quel que soit son nom.
+
+```yaml
+chemin:
+  - ~/code/acme/api
+  - ~/code/acme/front
+```
+
+Le dossier de travail est ramené à la racine de son dépôt git : un sous-dossier
+et un worktree — y compris `.claude/worktrees/*` — tombent sur la page du dépôt
+principal. Une page qui déclare exactement le dossier de travail reste
+prioritaire ; si deux pages déclarent le même dossier, celle qui a du contenu
+l'emporte et `vault-lint` signale le doublon. Le journal, les liens et le titre
+injecté portent le nom de la page : une page renommée ou partagée entre deux
+dépôts garde un seul journal.
+
+**Pas de page hors projet.** La capture automatique ne crée une page que dans un
+dépôt git, et jamais pour le dossier personnel, `~/.claude` ou un dossier
+temporaire de session (`<tmp>/claude-*`). Le bloc de journal s'écrit quand même,
+avec un titre sans lien.
+
+**Trois mémoires, trois rôles.** Les règles valables partout vivent dans
+`~/.claude/CLAUDE.md` ; les décisions, pièges et état d'un projet dans le vault ;
+ce que Claude apprend seul sur la machine et l'utilisateur dans la mémoire native
+de Claude Code. Le vault n'injecte plus de page de profil.
 
 La skill `vault-note` sert à l'écriture délibérée — c'est elle qui produit les
-bonnes notes ; les hooks ne sont que le filet automatique.
+bonnes notes ; les hooks ne sont que le filet automatique. Elle ne choisit jamais
+un nom de page : `bin/vault-page.js` lui rend la page du dossier courant, et la
+crée si le projet n'en a pas (une note délibérée peut en créer une hors git).
+
+**Voir ce que Claude sait.** `/rebenga:vault-status`, ou directement :
+
+```bash
+node vault-lint.js --project [dossier] [--show]   # page utilisée, écrit contre injecté, texte exact
+node vault-lint.js [--verbose]                    # tout le vault : pages injoignables, doublons, coût
+```
+
+`config-doctor` résume l'état du vault en une ligne (`Vault`).
 
 **Invariant de cohabitation.** Les hooks n'écrivent que dans les régions
 `<!-- claude:xxx:start -->` … `<!-- claude:xxx:end -->`. Tout ce qui est rédigé à
@@ -262,7 +292,7 @@ tokens à chaque session et n'apprennent rien au modèle. Une page qui ne contie
 que des placeholders injecte exactement zéro caractère.
 
 Budgets, en caractères : `CC_VAULT_BUDGET_PROJET` (3000),
-`CC_VAULT_BUDGET_PROFIL` (1500), `CC_VAULT_BUDGET_JOURNAL` (1200).
+`CC_VAULT_BUDGET_JOURNAL` (1200).
 Autre vault : `CC_VAULT=/chemin`. Couper : `CC_VAULT_DISABLED=1`.
 
 ```bash
@@ -548,6 +578,7 @@ claude plugin install rebenga@ownconfig
 | `/rebenga:refactor-clean` | code mort, dépendances inutiles, lot par lot, tests verts |
 | `/rebenga:context-budget` | coût estimé du contexte résident, top 3 des économies |
 | `/rebenga:token-stats [jours]` | bilan de la compression des sorties : commandes compressées, tokens économisés (est.), processeurs les plus rentables |
+| `/rebenga:vault-status` | ce que le vault contient pour le projet en cours : page utilisée, part réellement injectée, anomalies du vault et leur correction ; ne modifie rien sans accord |
 | `/rebenga:config-doctor` | diagnostic de la config installée (`bin/config-doctor.js`) et la commande qui corrige chaque écart ; ne répare rien sans accord |
 | `/rebenga:token-log [jours] [--toutes]` | liste une par une les commandes compressées (date, commande, processeur, avant → après, gain) ; `--toutes` ajoute celles rendues brutes |
 | `/rebenga:go-review`, `/rebenga:python-review` | revue via l'agent du langage |
@@ -586,7 +617,7 @@ Tout ce qui est propre à un projet (services attendus, URL de santé, paire de
 dépôts miroirs) est lu dans le projet lui-même — son `CLAUDE.md` ou ses scripts —
 jamais écrit dans ce dépôt public.
 
-Les commandes que l'on tape soi-même (`plan`, `token-log`, `token-stats`, `config-doctor`,
+Les commandes que l'on tape soi-même (`plan`, `token-log`, `token-stats`, `config-doctor`, `vault-status`,
 `env-set`, `deploy-verify`, `canary-watch`, `hookify`, `context-budget`,
 `dual-review`, `refactor-clean`) portent `disable-model-invocation: true` : elles
 restent disponibles au clavier, mais leur description n'est plus chargée dans le
