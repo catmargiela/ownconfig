@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { write, writeGuarded, upsertRegion, readRegion } = require('./store');
 const { projectFile, resolveProjectFile, projectDir, today } = require('./naming');
+const { canHavePage } = require('./identity');
 const { updateFrontmatter, tagOf, safe } = require('./render');
 const { oneLine, trimAtWord } = require('./filters');
 
@@ -14,12 +15,17 @@ const PROJECT_ENTRIES = 15;
 const SESSION_START = /<!-- claude:session:[A-Za-z0-9_-]+:start -->/g;
 const LEGACY_BLOCK = /^## \d{2}:\d{2} — Fin de session/gm;
 
-/** Creates the project page when absent. NEVER rewrites an existing page. */
+/**
+ * Page of the project, created when absent. NEVER rewrites an existing page.
+ * Returns null when no page exists and the folder may not have one
+ * (identity.js: outside git, home, Claude Code's folder, session scratchpad).
+ */
 function ensureProjectPage(name, cwd) {
   const existing = cwd ? resolveProjectFile(cwd) : projectFile(name);
   if (fs.existsSync(existing)) return existing;
   const f = projectFile(name);
   if (fs.existsSync(f)) return f;
+  if (cwd && !canHavePage(cwd).ok) return null;
   write(f, `---
 type: projet
 tags: [claude, projet]
@@ -30,7 +36,7 @@ chemin: ${cwd ? projectDir(cwd) : ''}
 
 > Page de contexte lue par Claude Code au début de chaque session sur ce projet.
 > Tout ce qui est écrit ici hors des blocs balisés est à toi, et n'est jamais réécrit.
-> Voir [[Index Claude]], [[Tableau de bord]] et [[Façon de coder]].
+> Voir [[Index Claude]] et [[Tableau de bord]].
 
 ## Ce que c'est
 
@@ -56,16 +62,17 @@ chemin: ${cwd ? projectDir(cwd) : ''}
   return f;
 }
 
+/** `page` is null for a folder without project page: the title is then plain text. */
 function journalTemplate(name, page, date) {
   return `---
 type: session
 date: ${date}
-projet: ${page}
+projet: ${page || name}
 tags: [claude, session, ${tagOf(name)}]
 sessions: 0
 ---
 
-# ${date} — [[${page}]]
+# ${date} — ${page ? `[[${page}]]` : name}
 `;
 }
 
@@ -113,7 +120,7 @@ function updateProjectEntries(pageFile, journalName, headline, prevEntry) {
 /** Former API: adds today's journal link to the project page. */
 function linkJournal(name, cwd) {
   const f = ensureProjectPage(name, cwd);
-  updateProjectEntries(f, `${today()} — ${name}`, '', null);
+  if (f) updateProjectEntries(f, `${today()} — ${path.basename(f, '.md')}`, '', null);
 }
 
 module.exports = { ensureProjectPage, writeSession, updateProjectEntries, linkJournal, countSessions, journalTemplate };

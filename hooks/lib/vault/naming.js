@@ -4,13 +4,14 @@
  *
  * A project is a git repository: its name comes from the repository root found
  * by walking up from `cwd` (worktrees resolve to the main repository). A page
- * that declares `chemin:` is found by that path first, so a page renamed by hand
- * never becomes an orphan.
+ * that declares the folder in `chemin:` is found by that path first, so a page
+ * renamed by hand never becomes an orphan.
  */
 const fs = require('fs');
 const path = require('path');
 const { gitRoot, findUp } = require('../util');
 const { DIRS, read } = require('./store');
+const { findPage, realOr } = require('./identity');
 
 const GENERIC_BASE = new Set([
   'www', 'app', 'apps', 'src', 'web', 'site', 'client', 'server', 'frontend',
@@ -43,31 +44,23 @@ function projectName(cwd) {
   return name.replace(/[\\/:*?"<>|]/g, '-').slice(0, 60);
 }
 
-const realOr = (p) => { try { return fs.realpathSync(p); } catch { return p; } };
-
 function projectFile(name) { return path.join(DIRS.projets, `${name}.md`); }
 
-/** A page declaring exactly `cwd` wins; otherwise the one declaring the git root. */
+/**
+ * The page declaring exactly `cwd` wins, then the one declaring the git root
+ * (identity.js); without either, the page named after the folder.
+ */
 function resolveProjectFile(cwd) {
-  if (!cwd) return projectFile(projectName(cwd));
-  const target = realOr(cwd);
-  const root = projectDir(cwd);
-  const rootReal = realOr(root);
-  let byRoot = null;
-  try {
-    for (const f of fs.readdirSync(DIRS.projets)) {
-      if (!f.endsWith('.md')) continue;
-      const full = path.join(DIRS.projets, f);
-      const m = read(full).match(/^chemin:\s*(.+)$/m);
-      if (!m) continue;
-      const declared = m[1].trim().replace(/^["']|["']$/g, '');
-      if (!declared) continue;
-      const real = realOr(declared);
-      if (real === target || declared === cwd) return full;
-      if (!byRoot && (real === rootReal || declared === root)) byRoot = full;
-    }
-  } catch { /* no Projets folder */ }
-  return byRoot || projectFile(projectName(cwd));
+  return (cwd && findPage(cwd)) || projectFile(projectName(cwd));
+}
+
+/**
+ * Name the memory of `cwd` goes by: the page's name when a page covers it, the
+ * folder's otherwise. Journals, links and the injection title all use it, so a
+ * renamed page or a page shared by several repositories keeps one journal.
+ */
+function memoryName(cwd) {
+  return path.basename(resolveProjectFile(cwd), '.md');
 }
 
 // Journal file names keep their historical UTC date; times shown are local.
@@ -114,6 +107,6 @@ function githubRepo(root) {
 }
 
 module.exports = {
-  projectDir, projectName, projectFile, resolveProjectFile, journalFile,
+  projectDir, projectName, projectFile, resolveProjectFile, memoryName, journalFile,
   today, now, hhmm, realOr, currentBranch, githubRepo,
 };

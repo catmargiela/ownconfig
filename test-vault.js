@@ -193,6 +193,81 @@ const mig = read(legacyFile);
 check('ancien bloc et note humaine intacts', mig.includes('## 10:00 — Fin de session\n\n**Demandé**\n- ancien\n\nNOTE HUMAINE\n'), true);
 check('nouveau bloc ajouté après, sessions: 2', [mig.includes('claude:session:sess-three:start'), /^sessions: 2$/m.test(mig)], [true, true]);
 
+// ---------------------------------------------------------------- identity
+group('Identité : une page par projet, retrouvée par ses dossiers');
+const I = require(path.join(LIB, 'vault', 'identity.js'));
+const P = path.join(VAULT, 'Claude', 'Projets');
+const mkRepo = (dir) => {
+  fs.mkdirSync(path.join(dir, '.git'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.git', 'HEAD'), 'ref: refs/heads/main\n');
+  return dir;
+};
+const stopIn = (sid, cwd, entries) => {
+  const tp = path.join(TMP, `${sid}.jsonl`);
+  T.writeJsonl(tp, T.session(entries));
+  writeState(sid, 'edited', ['x']);
+  v.onStop({ session_id: sid, transcript_path: tp, cwd });
+};
+const journalOf = (name) => (fs.readdirSync(J).find((f) => f.endsWith(`— ${name}.md`)) || null);
+check('chemin : scalaire, liste en ligne, liste en bloc', [
+  I.declaredPaths('---\nchemin: /a\n---\n'),
+  I.declaredPaths('---\nchemin: ["/a", /b]\n---\n'),
+  I.declaredPaths('---\ntype: projet\nchemin:\n  - /a\n  - /b\ntags: [x]\n---\n'),
+], [['/a'], ['/a', '/b'], ['/a', '/b']]);
+check('chemin écrit dans le corps de la page : ignoré', I.declaredPaths('---\ntype: projet\n---\n\nchemin: /a\n'), []);
+check('~ développé', I.declaredPaths('---\nchemin: ~/x\n---\n'), [path.join(HOME, 'x')]);
+const api = mkRepo(path.join(TMP, 'acme-api'));
+const front = mkRepo(path.join(TMP, 'acme-front'));
+const shared = path.join(P, 'Acme.md');
+fs.writeFileSync(shared, `---\ntype: projet\nchemin:\n  - ${api}\n  - ${front}\n---\n\n# Acme\n\n## Décisions\n\n` +
+  'Une API et un front.\n\n## Sessions\n\n<!-- claude:journal:start -->\n<!-- claude:journal:end -->\n');
+check('page multi-dépôts trouvée depuis chacun, et depuis un sous-dossier',
+  [api, front, path.join(front, 'src')].map((d) => v.resolveProjectFile(d)), [shared, shared, shared]);
+check('nom de mémoire = nom de la page', [v.memoryName(front), v.memoryName(PROJ)], ['Acme', 'demo-project']);
+const twin = path.join(P, 'AAA.md');
+fs.writeFileSync(twin, `---\nchemin: ${api}\n---\n\n# AAA\n\n## Décisions\n\n<!-- vide -->\n`);
+check('deux pages pour un dossier : celle qui a du contenu l\'emporte', v.resolveProjectFile(api), shared);
+check('conflit visible pour le diagnostic', I.candidatePages(api).map((p) => path.basename(p.file)), ['AAA.md', 'Acme.md']);
+fs.unlinkSync(twin);
+
+group('Journaux au nom de la page');
+stopIn('sess-api', api, [T.user('api'), T.edit('a1', path.join(api, 'x.js')), T.text('result: api livrée')]);
+const jAcme = read(path.join(J, journalOf('Acme') || 'absent'));
+check('journal nommé d\'après la page, pas le dossier', [Boolean(journalOf('Acme')), journalOf('acme-api')], [true, null]);
+check('projet: et titre au nom de la page', [/^projet: Acme$/m.test(jAcme), /^# \d{4}-\d{2}-\d{2} — \[\[Acme\]\]$/m.test(jAcme)], [true, true]);
+check('aucune page jumelle créée', fs.existsSync(path.join(P, 'acme-api.md')), false);
+check('session listée sur la page partagée', v.readRegion(read(shared), 'journal').includes('— Acme]] — api livrée'), true);
+const injFront = v.buildInjection(front) || '';
+check('dernière session partagée entre les dépôts de la page', injFront.includes('api livrée'), true);
+check('titre d\'injection au nom de la page', injFront.includes('### Contexte du projet Acme\n'), true);
+
+group('Création : aucune page hors projet');
+const loose = path.join(TMP, 'loose-folder');
+fs.mkdirSync(loose, { recursive: true });
+const scratchRoot = path.join(os.tmpdir(), `claude-ccxtest${process.pid}`);
+const scratch = mkRepo(path.join(scratchRoot, 'slug', 'sess', 'scratchpad', 'proj'));
+const internal = mkRepo(path.join(HOME, '.claude', 'projects'));
+const worktree = path.join(HOME, '.claude', 'jobs', 'j1', 'wt');
+fs.mkdirSync(worktree, { recursive: true });
+fs.mkdirSync(path.join(PROJ, '.git', 'worktrees', 'wt'), { recursive: true });
+fs.writeFileSync(path.join(worktree, '.git'), `gitdir: ${path.join(PROJ, '.git', 'worktrees', 'wt')}\n`);
+check('hors git, scratchpad de session, ~/.claude, dossier personnel : refusés',
+  [loose, scratch, internal, HOME].map((d) => I.canHavePage(d).ok), [false, false, false, false]);
+check('dépôt ordinaire, et worktree rangé sous ~/.claude : acceptés', [api, worktree].map((d) => I.canHavePage(d).ok), [true, true]);
+stopIn('sess-loose', loose, [T.user('note'), T.edit('l1', path.join(loose, 'x.js')), T.text('result: rangé')]);
+stopIn('sess-scratch', scratch, [T.user('essai'), T.edit('s1', path.join(scratch, 'x.js')), T.text('result: essai fait')]);
+const jLoose = read(path.join(J, journalOf('loose-folder') || 'absent'));
+check('journal écrit quand même', [jLoose.includes('> rangé'), Boolean(journalOf('scratchpad-proj'))], [true, true]);
+check('aucune page créée', ['loose-folder.md', 'scratchpad-proj.md', 'proj.md'].map((f) => fs.existsSync(path.join(P, f))), [false, false, false]);
+check('titre du journal sans lien', [/^# \d{4}-\d{2}-\d{2} — loose-folder$/m.test(jLoose), jLoose.includes('[[loose-folder]]')], [true, false]);
+check('tableau de bord : nom sans lien', /· loose-folder — rangé/.test(read(D.DASHBOARD)), true);
+fs.rmSync(scratchRoot, { recursive: true, force: true });
+
+group('Profil : hors de l\'injection');
+fs.mkdirSync(path.join(VAULT, 'Claude', 'Profil'), { recursive: true });
+fs.writeFileSync(path.join(VAULT, 'Claude', 'Profil', 'Façon de coder.md'), '# Façon de coder\n\n## Par défaut\n\nPROFIL-REMPLI\n');
+check('une page de profil remplie n\'est jamais injectée', (v.buildInjection(PROJ) || '').includes('PROFIL-REMPLI'), false);
+
 group('Robustesse et performance');
 const hook = spawnSync('node', [path.join(__dirname, 'hooks', 'dispatch.js'), 'stop'], {
   input: JSON.stringify(stopInput('sess-one', '/nonexistent.jsonl')), encoding: 'utf8',

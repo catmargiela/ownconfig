@@ -19,7 +19,6 @@ const DIRS = { projets: path.join(ROOT, 'Projets'), journal: path.join(ROOT, 'Jo
 // Injection budget at session start: what separates useful memory from a tax.
 const BUDGET = {
   projet: Number(process.env.CC_VAULT_BUDGET_PROJET) || 3000,
-  profil: Number(process.env.CC_VAULT_BUDGET_PROFIL) || 1500,
   journal: Number(process.env.CC_VAULT_BUDGET_JOURNAL) || 1200,
 };
 
