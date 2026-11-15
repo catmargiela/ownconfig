@@ -11,7 +11,9 @@
  *     - /path/to/api
  *     - /path/to/front
  *
- * A page without `chemin:` is never found: nothing is guessed from its name.
+ * A page without `chemin:` is reached only while it bears the default name of
+ * the folder (naming.js fallback). Renamed, or written under a name of its own,
+ * it is never found: nothing else is guessed from a name.
  */
 const fs = require('fs');
 const os = require('os');
@@ -20,7 +22,31 @@ const { gitRoot } = require('../util');
 const { DIRS, read } = require('./store');
 
 const realOr = (p) => { try { return fs.realpathSync(p); } catch { return p; } };
-const unquote = (s) => String(s).trim().replace(/^["']|["']$/g, '').trim();
+const CONTROL = /[\x00-\x1f\x7f]/;
+const HEAD_BYTES = 64 * 1024;
+
+/** One YAML scalar: quotes removed, or the trailing `# comment` of a bare value. */
+function scalar(s) {
+  const t = String(s).trim();
+  const quote = t[0];
+  if (quote !== '"' && quote !== "'") return t.replace(/(^|\s+)#.*$/, '').trim();
+  const end = t.lastIndexOf(quote);
+  return end > 0 ? t.slice(1, end) : t.slice(1);
+}
+
+/** A folder as written after `chemin:`; quoted when a bare value would be misread. */
+const pathScalar = (p) => (/\s#|^\s|\s$|^["'\[]/.test(p) ? `"${p}"` : p);
+
+/** Start of a file: the frontmatter is all that is needed to identify a page. */
+function readHead(file) {
+  let fd;
+  try {
+    fd = fs.openSync(file, 'r');
+    const buf = Buffer.alloc(HEAD_BYTES);
+    return buf.toString('utf8', 0, fs.readSync(fd, buf, 0, HEAD_BYTES, 0));
+  } catch { return ''; }
+  finally { if (fd !== undefined) { try { fs.closeSync(fd); } catch { /* ignore */ } } }
+}
 const expandHome = (p) => (p === '~' || p.startsWith('~/') ? path.join(os.homedir(), p.slice(1)) : p);
 const inside = (child, parent) => child === parent || child.startsWith(parent + path.sep);
 
@@ -37,26 +63,40 @@ function blockItems(lines, at) {
 
 /** Folders declared by `chemin:` in the frontmatter (scalar, inline or block list). */
 function declaredPaths(raw) {
-  const fm = String(raw || '').match(/^---\n([\s\S]*?)\n---/);
+  // A page saved by a Windows editor has a BOM and CRLF line ends.
+  const fm = String(raw || '').replace(/^\uFEFF/, '').match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!fm) return [];
-  const lines = fm[1].split('\n');
+  const lines = fm[1].split(/\r?\n/);
   const at = lines.findIndex((l) => /^chemin:/.test(l));
   if (at < 0) return [];
   const value = lines[at].slice('chemin:'.length).trim();
-  const inline = value.match(/^\[(.*)\]$/);
-  const items = inline ? inline[1].split(',') : value ? [value] : blockItems(lines, at);
-  return items.map(unquote).filter(Boolean).map(expandHome);
+  const inline = value.match(/^\[(.*)\]\s*(?:#.*)?$/);
+  const bare = scalar(value);
+  const items = inline ? inline[1].split(',') : bare ? [value] : blockItems(lines, at);
+  return items.map(scalar).filter(Boolean).map(expandHome);
 }
+
+let cache = null;
 
 /** Every project page that declares at least one folder, in file-name order. */
 function projectPages() {
+  return cache || scanPages();
+}
+
+/** Runs `fn` with the pages read once: an audit resolves every folder of every page. */
+function withPageCache(fn) {
+  cache = scanPages();
+  try { return fn(); } finally { cache = null; }
+}
+
+function scanPages() {
   let names = [];
   try { names = fs.readdirSync(DIRS.projets).filter((f) => f.endsWith('.md')).sort(); }
   catch { /* no Projets folder */ }
   return names
     .map((f) => {
       const file = path.join(DIRS.projets, f);
-      const paths = declaredPaths(read(file));
+      const paths = declaredPaths(readHead(file));
       return { file, paths, real: paths.map(realOr) };
     })
     .filter((p) => p.paths.length > 0);
@@ -92,6 +132,15 @@ function findPage(cwd) {
   return winner ? winner.file : null;
 }
 
+/**
+ * Does `file` declare a folder that still exists? Asked about the page bearing
+ * the default name of a folder it does not declare: it is then another
+ * project's page, not this one's. (All its folders gone: the project moved.)
+ */
+function ownedElsewhere(file) {
+  return declaredPaths(readHead(file)).some((p) => fs.existsSync(p));
+}
+
 /** Is `real` a Claude Code session scratchpad (`<tmp>/claude-<uid>/…`)? */
 function isScratchpad(real) {
   return [...new Set([realOr(os.tmpdir()), '/tmp'])].some((tmp) => {
@@ -112,11 +161,16 @@ function canHavePage(cwd) {
   const root = gitRoot(cwd);
   const real = realOr(root || cwd);
   const home = realOr(os.homedir());
+  // Written in the frontmatter as is: a line break there would forge a key.
+  if (CONTROL.test(real)) return no('unsafe', 'nom de dossier illisible');
   if (real === home) return no('home', 'dossier personnel');
-  if (inside(real, path.join(home, '.claude'))) return no('internal', 'dossier interne de Claude Code');
+  if (inside(real, realOr(path.join(home, '.claude')))) return no('internal', 'dossier interne de Claude Code');
   if (isScratchpad(real)) return no('scratchpad', 'dossier temporaire de session');
   if (!root) return no('no-git', 'hors dépôt git');
   return { ok: true, code: 'ok', why: '' };
 }
 
-module.exports = { declaredPaths, projectPages, candidatePages, findPage, canHavePage, realOr };
+module.exports = {
+  declaredPaths, pathScalar, projectPages, withPageCache, candidatePages, findPage,
+  ownedElsewhere, canHavePage, realOr,
+};

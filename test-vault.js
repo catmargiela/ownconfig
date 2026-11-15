@@ -216,6 +216,18 @@ check('chemin : scalaire, liste en ligne, liste en bloc', [
 ], [['/a'], ['/a', '/b'], ['/a', '/b']]);
 check('chemin écrit dans le corps de la page : ignoré', I.declaredPaths('---\ntype: projet\n---\n\nchemin: /a\n'), []);
 check('~ développé', I.declaredPaths('---\nchemin: ~/x\n---\n'), [path.join(HOME, 'x')]);
+check('fichier Windows (BOM, CRLF) : chemin lu quand même', [
+  I.declaredPaths('\uFEFF---\r\nchemin: /a\r\n---\r\n'),
+  I.declaredPaths('---\r\nchemin:\r\n  - /a\r\n  - /b\r\n---\r\n'),
+], [['/a'], ['/a', '/b']]);
+check('commentaire en fin de valeur : retiré', [
+  I.declaredPaths('---\nchemin: /a # le dépôt\n---\n'),
+  I.declaredPaths('---\nchemin: [/a, /b] # deux dépôts\n---\n'),
+  I.declaredPaths('---\nchemin: # liste\n  - /a # api\n---\n'),
+  I.declaredPaths('---\nchemin: "/a #b"\n---\n'),
+], [['/a'], ['/a', '/b'], ['/a'], ['/a #b']]);
+check('dossier au nom piégeux : relu tel qu\'il a été écrit',
+  ['/a/b', '/a/b #c', '/a/b '].map((d) => I.declaredPaths(`---\nchemin: ${I.pathScalar(d)}\n---\n`)[0]), ['/a/b', '/a/b #c', '/a/b ']);
 const api = mkRepo(path.join(TMP, 'acme-api'));
 const front = mkRepo(path.join(TMP, 'acme-front'));
 const shared = path.join(P, 'Acme.md');
@@ -260,6 +272,31 @@ const jLoose = read(path.join(J, journalOf('loose-folder') || 'absent'));
 check('journal écrit quand même', [jLoose.includes('> rangé'), Boolean(journalOf('scratchpad-proj'))], [true, true]);
 check('aucune page créée', ['loose-folder.md', 'scratchpad-proj.md', 'proj.md'].map((f) => fs.existsSync(path.join(P, f))), [false, false, false]);
 check('titre du journal sans lien', [/^# \d{4}-\d{2}-\d{2} — loose-folder$/m.test(jLoose), jLoose.includes('[[loose-folder]]')], [true, false]);
+
+group('Noms hostiles et homonymes');
+const S = require(path.join(LIB, 'vault', 'store.js'));
+check('nom de projet : syntaxe de lien, de titre et caractères de contrôle retirés',
+  [v.projectName('/x/ev[il]#^name'), v.projectName('/x/long\nprojet: forged')], ['ev-il---name', 'longprojet- forged']);
+const forged = mkRepo(path.join(TMP, 'bad\nchemin: forged'));
+check('dossier au nom contenant un retour à la ligne : pas de page', I.canHavePage(forged).code, 'unsafe');
+stopIn('sess-forged', forged, [T.user('x'), T.edit('f1', path.join(forged, 'x.js')), T.text('result: fait')]);
+check('rien de forgé dans une page', fs.readdirSync(P).some((f) => read(path.join(P, f)).includes('forged')), false);
+const jForged = read(path.join(J, fs.readdirSync(J).find((f) => f.includes('forged')) || 'absent'));
+check('journal : clé projet: sur une seule ligne', [/^projet: badchemin- forged$/m.test(jForged), /^chemin:/m.test(jForged)], [true, false]);
+const one = mkRepo(path.join(TMP, 'one', 'samename'));
+const two = mkRepo(path.join(TMP, 'two', 'samename'));
+const pageOne = v.ensureProjectPage(v.projectName(one), one);
+const pageTwo = v.ensureProjectPage(v.projectName(two), two);
+check('deux dépôts homonymes : deux pages, chacune avec son dossier', [
+  path.basename(pageOne), /^samename-[0-9a-f]{4}\.md$/.test(path.basename(pageTwo)),
+  I.declaredPaths(read(pageOne)), I.declaredPaths(read(pageTwo)),
+], ['samename.md', true, [one], [two]]);
+check('la page d\'un homonyme n\'est jamais injectée', [v.resolveProjectFile(one), v.resolveProjectFile(two)], [pageOne, pageTwo]);
+fs.writeFileSync(path.join(P, 'movedrepo.md'), `---\nchemin: ${path.join(TMP, 'gone', 'movedrepo')}\n---\n\n# movedrepo\n`);
+check('dépôt déplacé : sa page reste trouvée par son nom',
+  path.basename(v.resolveProjectFile(mkRepo(path.join(TMP, 'movedrepo')))), 'movedrepo.md');
+check('affichage : séquences d\'échappement neutralisées',
+  [S.printable('a\x1b[31mb\nc'), S.printable('a\x1b[31mb\nc', true)], ['a?[31mb?c', 'a?[31mb\nc']);
 check('tableau de bord : nom sans lien', /· loose-folder — rangé/.test(read(D.DASHBOARD)), true);
 fs.rmSync(scratchRoot, { recursive: true, force: true });
 
@@ -314,8 +351,14 @@ const outside = () => A.auditVault().horsProjet.map((h) => h.name);
 check('page vide d\'un dossier hors git : signalée', outside().includes('loose-note'), true);
 fs.appendFileSync(path.join(P, 'loose-note.md'), '\n## Notes\n\nRédigée à la main.\n');
 check('la même page une fois rédigée : plus signalée', outside().includes('loose-note'), false);
-const audit = A.auditVault();
-check('diagnostic en lecture seule : aucun fichier écrit', fs.readdirSync(P).length, audit.counts.projets);
+const snapshot = () => fs.readdirSync(path.join(VAULT, 'Claude'), { recursive: true }).sort()
+  .map((f) => [f, S.hash(read(path.join(VAULT, 'Claude', f)))]);
+const before = snapshot();
+A.auditVault();
+A.projectReport(front);
+run('vault-lint.js', ['--verbose']);
+run('vault-lint.js', ['--project', front, '--show']);
+check('diagnostic en lecture seule : aucun fichier créé ni modifié', snapshot(), before);
 
 group('Robustesse et performance');
 const hook = spawnSync('node', [path.join(__dirname, 'hooks', 'dispatch.js'), 'stop'], {

@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { write, writeGuarded, upsertRegion, readRegion } = require('./store');
 const { projectFile, resolveProjectFile, projectDir, today } = require('./naming');
-const { canHavePage } = require('./identity');
+const { canHavePage, pathScalar } = require('./identity');
 const { updateFrontmatter, tagOf, safe } = require('./render');
 const { oneLine, trimAtWord } = require('./filters');
 
@@ -23,19 +23,18 @@ const LEGACY_BLOCK = /^## \d{2}:\d{2} — Fin de session/gm;
  * automatic capture never creates a page for a loose folder, a person may.
  */
 function ensureProjectPage(name, cwd, deliberate = false) {
-  const existing = cwd ? resolveProjectFile(cwd) : projectFile(name);
-  if (fs.existsSync(existing)) return existing;
-  const f = projectFile(name);
+  // The file decides the name: `name` is only used when there is no folder.
+  const f = cwd ? resolveProjectFile(cwd) : projectFile(name);
   if (fs.existsSync(f)) return f;
   const can = cwd ? canHavePage(cwd) : { ok: true };
   if (!can.ok && !(deliberate && can.code === 'no-git')) return null;
   write(f, `---
 type: projet
 tags: [claude, projet]
-chemin: ${cwd ? projectDir(cwd) : ''}
+chemin: ${cwd ? pathScalar(projectDir(cwd)) : ''}
 ---
 
-# ${name}
+# ${path.basename(f, '.md')}
 
 > Page de contexte lue par Claude Code au début de chaque session sur ce projet.
 > Tout ce qui est écrit ici hors des blocs balisés est à toi, et n'est jamais réécrit.

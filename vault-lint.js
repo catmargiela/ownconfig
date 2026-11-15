@@ -22,7 +22,7 @@ const { auditVault, projectReport } = require(path.join(HERE, 'hooks', 'lib', 'v
 const ARGS = process.argv.slice(2);
 const VERBOSE = ARGS.includes('--verbose');
 const pad = (s, n) => String(s).padEnd(n);
-const tilde = (p) => String(p).replace(os.homedir(), '~');
+const tilde = (p) => store.printable(String(p).replace(os.homedir(), '~'));
 
 function bloc(titre, items, fmt) {
   if (!items.length) return;
@@ -37,7 +37,7 @@ function printProject(dir) {
   console.log(`\n  Dossier : ${tilde(r.dir)}`);
   if (r.page) {
     console.log(`  Page    : Projets/${r.name}.md`);
-    console.log(`  Couvre  : ${r.paths.length ? r.paths.map(tilde).join(', ') : '(aucun `chemin:` — trouvée par son nom seulement)'}`);
+    console.log(`  Couvre  : ${r.paths.length ? r.paths.map(tilde).join(', ') : '(aucun `chemin:` — trouvée par le nom du dossier seulement)'}`);
     console.log(`  Contenu : ${r.written} car. écrits, ${r.injected} injectés` +
       (r.truncated ? `  ⚠ coupée au budget de ${r.budget}` : ''));
   } else {
@@ -46,7 +46,7 @@ function printProject(dir) {
   if (r.conflict.length > 1) console.log(`  ⚠ Doublon : ${r.conflict.join(', ')} déclarent ce dossier ; ${r.name} est utilisée`);
   console.log(`  Dernière session : ${r.lastSession ? 'injectée' : 'aucune'}`);
   console.log(`  Coût au démarrage : ~${r.startTokens} tokens`);
-  if (ARGS.includes('--show')) console.log(`\n${r.injection || '  (rien n\'est injecté)'}`);
+  if (ARGS.includes('--show')) console.log(`\n${store.printable(r.injection, true) || '  (rien n\'est injecté)'}`);
   else console.log('\n  --show pour voir le texte exact injecté.');
   console.log('');
 }
@@ -61,17 +61,17 @@ function printVault() {
   console.log('  ' + '─'.repeat(62));
   for (const p of [...a.pages].sort((x, y) => y.startTokens - x.startTokens)) {
     console.log(`  ${pad(p.name.slice(0, 25), 26)} ${pad('~' + p.startTokens + ' tok', 11)} ${p.written} → ${p.injected} car.` +
-      (p.paths.length ? '' : '   ⚠ jamais injectée'));
+      (p.paths.length ? '' : '   ⚠ sans `chemin:`'));
   }
   if (!a.pages.length) console.log('  (aucune page projet — elles se créent à la première session qui édite un fichier)');
 
-  bloc('PAGES SANS `chemin:` — jamais injectées', a.sansChemin, (n) => `Projets/${n}.md`);
+  bloc('PAGES SANS `chemin:` — injectées seulement si elles portent le nom du dossier', a.sansChemin, (n) => `Projets/${n}.md`);
   bloc('DOUBLONS — plusieurs pages pour un même dossier', a.doublons, (d) => `${d.pages.join(', ')} → ${d.winner} est utilisée`);
   bloc('PAGES HORS PROJET — dossier qui ne devrait pas avoir de page', a.horsProjet, (p) => `Projets/${p.name}.md : ${p.why}`);
   bloc('PAGES MUETTES — que des placeholders, injectent zéro', a.muettes, (n) => `Projets/${n}.md`);
   bloc('PAGES TRONQUÉES — écrit mais pas injecté en entier', a.tronquees, (p) => `Projets/${p.name}.md : ${p.written} car. pour un budget de ${a.budget}`);
   bloc('PAGES VOLUMINEUSES — relire et élaguer', a.grosses, (p) => `Projets/${p.name}.md : ${p.raw} car.`);
-  bloc('LIENS CASSÉS', a.liensCasses, (l) => `${l.page} → [[${l.target}]]`);
+  bloc('LIENS CASSÉS', a.liensCasses, (l) => `${store.printable(l.page)} → [[${store.printable(l.target)}]]`);
   bloc('PAGES PROJET SANS SESSION ENREGISTRÉE', a.inutilisees, (n) => `Projets/${n}.md`);
 
   const total = a.sansChemin.length + a.doublons.length + a.horsProjet.length + a.muettes.length +
@@ -82,7 +82,7 @@ function printVault() {
 }
 
 const st = store.vaultStatus();
-if (!st.ok) { console.error(`Vault inactif : ${st.why}`); process.exit(1); }
+if (!st.ok) { console.error(`Vault inactif : ${store.printable(st.why)}`); process.exit(1); }
 
 const at = ARGS.indexOf('--project');
 if (at >= 0) {

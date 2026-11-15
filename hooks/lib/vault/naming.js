@@ -10,8 +10,8 @@
 const fs = require('fs');
 const path = require('path');
 const { gitRoot, findUp } = require('../util');
-const { DIRS, read } = require('./store');
-const { findPage, realOr } = require('./identity');
+const { DIRS, read, hash } = require('./store');
+const { findPage, ownedElsewhere, realOr } = require('./identity');
 
 const GENERIC_BASE = new Set([
   'www', 'app', 'apps', 'src', 'web', 'site', 'client', 'server', 'frontend',
@@ -32,6 +32,8 @@ function projectDir(cwd) {
 /**
  * Readable, discriminating page name: a short or generic basename is prefixed by
  * its parent folder, unless that parent is a mere container (`Documents`…).
+ * The name ends up in file names, wikilinks and frontmatter: whatever would
+ * break one of them (path, link and heading syntax, control characters) goes.
  */
 function projectName(cwd) {
   if (!cwd) return 'Sans projet';
@@ -41,17 +43,25 @@ function projectName(cwd) {
   const ambiguous = GENERIC_BASE.has(base.toLowerCase()) || base.length <= 4;
   const usable = parent && !CONTAINERS.has(parent.toLowerCase());
   const name = ambiguous && usable ? `${parent}-${base}` : base;
-  return name.replace(/[\\/:*?"<>|]/g, '-').slice(0, 60);
+  const clean = name.replace(/[\x00-\x1f\x7f]/g, '').replace(/[\\/:*?"<>|[\]#^]/g, '-').trim();
+  return clean.slice(0, 60) || 'projet';
 }
 
 function projectFile(name) { return path.join(DIRS.projets, `${name}.md`); }
 
 /**
  * The page declaring exactly `cwd` wins, then the one declaring the git root
- * (identity.js); without either, the page named after the folder.
+ * (identity.js); without either, the page named after the folder — unless
+ * that page belongs to another project of the same name, in which case this
+ * folder gets a name of its own.
  */
 function resolveProjectFile(cwd) {
-  return (cwd && findPage(cwd)) || projectFile(projectName(cwd));
+  const found = cwd && findPage(cwd);
+  if (found) return found;
+  const name = projectName(cwd);
+  const byName = projectFile(name);
+  if (!cwd || !ownedElsewhere(byName)) return byName;
+  return projectFile(`${name}-${hash(realOr(projectDir(cwd))).slice(0, 4)}`);
 }
 
 /**

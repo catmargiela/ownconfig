@@ -137,7 +137,7 @@ function checkPython() {
 function checkVault() {
   const lib = (name) => require(path.join(REPO, 'hooks', 'lib', 'vault', name));
   const status = lib('store.js').vaultStatus();
-  if (!status.ok) return [item('OK', 'Vault', `inactif : ${status.why}`)];
+  if (!status.ok) return [item('OK', 'Vault', `inactif : ${lib('store.js').printable(status.why)}`)];
   const a = lib('audit.js').auditVault();
   const notes = [
     [a.sansChemin.length, 'sans chemin'], [a.doublons.length, 'doublon(s)'], [a.horsProjet.length, 'hors projet'],

@@ -8,14 +8,15 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { ROOT, DIRS, BUDGET, read, readRegion } = require('./store');
-const { declaredPaths, candidatePages, canHavePage } = require('./identity');
+const { ROOT, DIRS, BUDGET, read, readRegion, printable } = require('./store');
+const { declaredPaths, candidatePages, canHavePage, withPageCache } = require('./identity');
 const { resolveProjectFile, memoryName } = require('./naming');
 const { cleanForInjection, buildInjection } = require('./inject');
 
 const BIG_PAGE = 12000;
 const tok = (s) => Math.round((s || '').length / 4);
-const nameOf = (file) => path.basename(file, '.md');
+/** Page name as shown in a report. */
+const nameOf = (file) => printable(path.basename(file, '.md'));
 
 function listMd(dir) {
   try { return fs.readdirSync(dir).filter((f) => f.endsWith('.md')).sort().map((f) => path.join(dir, f)); }
@@ -65,8 +66,12 @@ function pageRecord(file) {
   };
 }
 
-/** Whole-vault findings. Never writes. */
+/** Whole-vault findings. Never writes. Pages are read once for the whole audit. */
 function auditVault() {
+  return withPageCache(scanVault);
+}
+
+function scanVault() {
   const projets = listMd(DIRS.projets);
   const journaux = listMd(DIRS.journal);
   const pages = projets.map(pageRecord);
@@ -94,7 +99,7 @@ function projectReport(dir) {
   const injection = buildInjection(dir) || '';
   return {
     dir,
-    name: memoryName(dir),
+    name: printable(memoryName(dir)),
     page: exists ? file : null,
     paths: declaredPaths(raw),
     canHavePage: canHavePage(dir),
