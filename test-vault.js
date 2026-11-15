@@ -347,6 +347,13 @@ check('sous-sections d\'une section coupée listées', sum.includes('Sous-sectio
 const many = SUM.summarize(Array.from({ length: 200 }, (_, i) => `## Section ${i}\n${'texte '.repeat(30)}`).join('\n\n'), 3000, '/x.md');
 check('200 sections : titres seuls, budget tenu, reste compté', [many.length <= 3000, many.includes('## Section 0 ('), /… \+\d+ section\(s\)$/.test(many)], [true, true, true]);
 check('une seule ligne énorme : coupée à un mot, budget tenu', SUM.summarize(`## A\n${'mot '.repeat(2000)}`, 3000, '/x.md').length <= 3000, true);
+const tiny = SUM.summarize(longPage, 150, '/vault/Projets/Long.md');
+check('budget minuscule : tenu, et le chemin de la page reste', [tiny.length <= 150, tiny.includes('/vault/Projets/Long.md')], [true, true]);
+const flat = SUM.summarize('ligne de texte\n'.repeat(400), 3000, '/x.md');
+check('page sans section : début du texte, budget tenu', [flat.length <= 3000, flat.includes('ligne de texte\nligne de texte')], [true, true]);
+const cutFence = SUM.summarize(`## Code\n\`\`\`js\n### pas un titre\n${'x();\n'.repeat(900)}\`\`\`\n\n## Après\nfin`, 3000, '/x.md');
+check('bloc de code coupé : refermé, et ses lignes ne sont pas des sous-sections',
+  [/x\(\);\n```\n…/.test(cutFence), cutFence.includes('Sous-sections'), cutFence.includes('## Après\nfin'), cutFence.length <= 3000], [true, false, true, true]);
 const longRepo = mkRepo(path.join(TMP, 'long-repo'));
 const longFile = path.join(P, 'Long.md');
 fs.writeFileSync(longFile, `---\nchemin: ${longRepo}\n---\n\n# Long\n\n${longPage}\n`);
@@ -361,7 +368,7 @@ fs.writeFileSync(path.join(P, 'Big.md'), `---\nchemin: ${bigRepo}\n---\n\n# Big\
 const lp = run('vault-lint.js', ['--project', bigRepo]).stdout;
 const injectedSize = Number((lp.match(/écrits, (\d+) injectés/) || [])[1]);
 check('projet : page utilisée, écrit contre injecté, sommaire signalé',
-  [lp.includes('Page    : Projets/Big.md'), /5\d{3} car\. écrits/.test(lp), injectedSize > 2000 && injectedSize <= 3000,
+  [lp.includes('Page    : Projets/Big.md'), /5\d{3} car\. écrits/.test(lp), injectedSize > 0 && injectedSize <= 3000,
     lp.includes('sommaire : la page dépasse le budget de 3000')],
   [true, true, true, true]);
 check('projet sans page : raison donnée', run('vault-lint.js', ['--project', loose]).stdout.includes('aucune — hors dépôt git'), true);

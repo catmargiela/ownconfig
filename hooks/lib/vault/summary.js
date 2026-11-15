@@ -10,9 +10,14 @@ const INTRO_SHARE = 0.2;
 const MIN_EXCERPT = 60;
 const SUBS_MAX = 160;
 
-const note = (file) =>
-  `Page trop longue pour être injectée en entier : ceci en est le sommaire. Texte complet : ${file} — ` +
-  'lire la section concernée avant de travailler dessus.';
+/** Opening line. Under a tiny budget it shrinks to what matters most: where the page is. */
+function note(file, budget) {
+  const full = `Page trop longue pour être injectée en entier : ceci en est le sommaire. Texte complet : ${file} — ` +
+    'lire la section concernée avant de travailler dessus.';
+  return full.length + MIN_EXCERPT <= budget ? full : `Sommaire. Texte complet : ${file}`;
+}
+
+const FENCE = /^\s*```/;
 
 /** Introduction (text before the first `## `) and `##` sections, `###` kept inside. */
 function splitSections(clean) {
@@ -21,7 +26,9 @@ function splitSections(clean) {
   const sections = [];
   for (let i = 0; i < parts.length; i += 2) {
     const body = (parts[i + 1] || '').trim();
-    const subs = [...body.matchAll(/^###+ (.+)$/gm)].map((m) => m[1].trim());
+    // A `###` line inside a code block is code, not a sub-heading.
+    const prose = body.replace(/^\s*```[\s\S]*?^\s*```/gm, '');
+    const subs = [...prose.matchAll(/^###+ (.+)$/gm)].map((m) => m[1].trim());
     sections.push({ title: parts[i].slice(3).trim(), body, subs });
   }
   return { intro, sections };
@@ -33,13 +40,15 @@ function excerpt(text, max) {
   const kept = [];
   let used = 0;
   for (const line of text.split('\n')) {
-    if (used + line.length + 1 > max - 2) break;
+    if (used + line.length + 1 > max - 6) break; // room for a closing fence and `…`
     kept.push(line);
     used += line.length + 1;
   }
   while (kept.length && !kept[kept.length - 1].trim()) kept.pop();
   if (!kept.length) return trimAtWord(text.split('\n')[0], Math.max(1, max - 1));
-  return `${kept.join('\n')}\n…`;
+  // A code block cut in its middle is closed, or it would swallow what follows.
+  const open = kept.filter((l) => FENCE.test(l)).length % 2 === 1;
+  return `${kept.join('\n')}\n${open ? '```\n' : ''}…`;
 }
 
 const heading = (s) => `## ${s.title} (${s.body.length} car.)`;
@@ -90,7 +99,7 @@ function renderSection(s, room) {
 function summarize(clean, budget, file) {
   if (clean.length <= budget) return clean;
   const { intro, sections } = splitSections(clean);
-  const lead = note(file);
+  const lead = note(file, budget);
   const introPart = intro ? excerpt(intro, Math.max(MIN_EXCERPT, Math.floor(budget * INTRO_SHARE))) : '';
   const head = [lead, introPart].filter(Boolean).join('\n\n');
   if (!sections.length) return [lead, excerpt(intro, Math.max(0, budget - lead.length - 2))].join('\n\n').slice(0, budget);
