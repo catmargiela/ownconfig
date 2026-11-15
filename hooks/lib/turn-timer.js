@@ -7,8 +7,9 @@
  *
  * Placed last in the Stop chain: a gate that sends the agent back to work exits
  * with 2 before this runs, so the notification only fires on a real end.
- * macOS only (osascript), detached, text passed as argv (never interpolated
- * into AppleScript). Off with CCX_NOTIFY=off, in `minimal`, or CCX_DISABLED=1.
+ * macOS (osascript) and Linux (notify-send), detached, text passed as argv (never
+ * interpolated into AppleScript or a shell). A missing notifier is a silent no-op.
+ * Off with CCX_NOTIFY=off, in `minimal`, or CCX_DISABLED=1.
  */
 const path = require('path');
 const { spawn } = require('child_process');
@@ -16,8 +17,19 @@ const { enabled, readState, writeState } = require('./util');
 
 const SCRIPT = ['on run argv', 'display notification (item 1 of argv) with title (item 2 of argv)', 'end run'];
 
+/** Notifier binary and argv for `platform`, or null when the platform has none. */
+function notifierCommand(platform, message, title) {
+  if (platform === 'darwin') {
+    return { bin: '/usr/bin/osascript', args: [...SCRIPT.flatMap((l) => ['-e', l]), message, title] };
+  }
+  if (platform === 'linux') {
+    return { bin: '/usr/bin/notify-send', args: ['--app-name=Claude Code', '--', title, message] };
+  }
+  return null;
+}
+
 function active() {
-  if (process.platform !== 'darwin' || !enabled(['standard', 'strict'])) return false;
+  if (!notifierCommand(process.platform, '', '') || !enabled(['standard', 'strict'])) return false;
   return String(process.env.CCX_NOTIFY || '').trim().toLowerCase() !== 'off';
 }
 
@@ -32,9 +44,10 @@ function duration(sec) {
 }
 
 function notify(message, title) {
+  const command = notifierCommand(process.platform, message, title);
+  if (!command) return;
   try {
-    const child = spawn('/usr/bin/osascript', [...SCRIPT.flatMap((l) => ['-e', l]), message, title],
-      { detached: true, stdio: 'ignore' });
+    const child = spawn(command.bin, command.args, { detached: true, stdio: 'ignore' });
     child.on('error', () => {});
     child.unref();
   } catch { /* a notification never matters more than the answer */ }
@@ -57,4 +70,4 @@ function onStop(input) {
   notify(`Réponse terminée en ${duration(sec)}`, `Claude Code · ${project}`);
 }
 
-module.exports = { onPrompt, onStop, duration, threshold };
+module.exports = { onPrompt, onStop, duration, threshold, notifierCommand };

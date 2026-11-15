@@ -97,12 +97,17 @@ check('CCX_DELIVERY_CHECK=off : muet', stop('port-deliv-off', { CCX_DELIVERY_CHE
 
 // ---------------------------------------------------------------- turn-timer
 group('Notification de fin de réponse (turn-timer)');
-const { duration } = require('./hooks/lib/turn-timer');
+const { duration, notifierCommand } = require('./hooks/lib/turn-timer');
 check('durées', [duration(42), duration(192), duration(3600)], ['42 s', '3 min 12', '60 min 00']);
+check('Linux : notify-send, texte en argv après `--`', notifierCommand('linux', 'msg', 'titre'),
+  { bin: '/usr/bin/notify-send', args: ['--app-name=Claude Code', '--', 'titre', 'msg'] });
+check('macOS : osascript, texte en derniers argv', notifierCommand('darwin', 'msg', 'titre').args.slice(-2), ['msg', 'titre']);
+check('plateforme sans notificateur : aucune commande', notifierCommand('win32', 'msg', 'titre'), null);
+const hasNotifier = notifierCommand(process.platform, '', '') !== null;
 const turnFile = path.join(HOME, '.claude', 'state', 'ccx', 'port-turn.turn.json');
 hook('prompt', { session_id: 'port-turn', hook_event_name: 'UserPromptSubmit', prompt: 'x' });
 const started = fs.existsSync(turnFile) && typeof JSON.parse(fs.readFileSync(turnFile, 'utf8')).start === 'number';
-check(process.platform === 'darwin' ? 'macOS : début du tour enregistré' : 'hors macOS : rien enregistré', started, process.platform === 'darwin');
+check(hasNotifier ? 'macOS / Linux : début du tour enregistré' : 'plateforme sans notificateur : rien enregistré', started, hasNotifier);
 hook('stop', { session_id: 'port-turn', cwd: TMP, hook_event_name: 'Stop' });
 check('Stop sous le seuil : état vidé, aucune notification', fs.existsSync(turnFile) ? JSON.parse(fs.readFileSync(turnFile, 'utf8')) : {}, {});
 

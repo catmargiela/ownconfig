@@ -15,6 +15,8 @@ if (!fs.existsSync(VAULT)) {
 }
 ensureDirs();
 
+const MACHINE = { darwin: 'macOS', linux: 'Linux', win32: 'Windows' }[process.platform] || process.platform;
+
 const PAGES = {
   [path.join(ROOT, 'Index Claude.md')]: `---
 type: index
@@ -122,7 +124,7 @@ tags: [claude, profil]
 
 ## Environnement
 
-- Machine : macOS
+- Machine : ${MACHINE}
 - Claude Code : configuration versionnée dans \`~/.claude-config\`
 
 Voir [[Façon de coder]] et [[Index Claude]].
