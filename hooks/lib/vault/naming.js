@@ -73,8 +73,11 @@ function memoryName(cwd) {
   return path.basename(resolveProjectFile(cwd), '.md');
 }
 
-// Journal file names keep their historical UTC date; times shown are local.
-const today = () => new Date().toISOString().slice(0, 10);
+/** Local date, like the times shown: a session after midnight belongs to the new day. */
+function today(d = new Date()) {
+  const two = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}`;
+}
 const now = () => new Date().toTimeString().slice(0, 5);
 
 /** Local HH:MM of an ISO timestamp, or of now when absent/invalid. */
