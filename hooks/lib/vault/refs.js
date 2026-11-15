@@ -16,6 +16,15 @@ const { execFileSync } = require('child_process');
 const BRANCH = /^(feat|feature|fix|chore|refactor|docs|test|perf|hotfix|release|wip)\/[\w./-]+$/;
 const NOT_A_PATH = /[<>*?$|{}=;,&()\s…]|^https?:|^[a-z]+:\/\/|^\.\.?$|^-|\.\.\./i;
 const HAS_EXT = /\.[A-Za-z0-9]{1,6}$/;
+const NAMED_EXT = /\.[A-Za-z][A-Za-z0-9]{0,5}$/;                       // `.md`, not the `.0` of `release/1.0`
+const POSITION = /(?:[.:]+|:\d+(?:-\d+)?|#L\d+(?:-L?\d+)?)$/;          // `a.ts:12:5`, `a.ts#L3-L9`, a final dot
+
+/** `token` without what points inside the file: line, column, anchor. */
+function bare(token) {
+  let t = token;
+  while (POSITION.test(t)) t = t.replace(POSITION, '');
+  return t;
+}
 
 /**
  * Text in backticks with its line number in the file. The frontmatter and the
@@ -23,10 +32,10 @@ const HAS_EXT = /\.[A-Za-z0-9]{1,6}$/;
  */
 function quoted(raw) {
   const out = [];
-  const lines = String(raw || '').split(/\r?\n/);
-  let skip = lines[0] === '---' ? 'frontmatter' : null;
+  const lines = String(raw || '').replace(/^﻿/, '').split(/\r?\n/);
+  let skip = lines[0].trimEnd() === '---' ? 'frontmatter' : null;
   lines.forEach((line, i) => {
-    if (skip === 'frontmatter') { if (i > 0 && line === '---') skip = null; return; }
+    if (skip === 'frontmatter') { if (i > 0 && line.trimEnd() === '---') skip = null; return; }
     if (/<!-- claude:[A-Za-z0-9:_-]+:start -->/.test(line)) skip = 'region';
     if (skip === 'region') { if (/<!-- claude:[A-Za-z0-9:_-]+:end -->/.test(line)) skip = null; return; }
     for (const m of line.matchAll(/`([^`\n]+)`/g)) out.push({ token: m[1].trim(), line: i + 1, text: line.trim() });
@@ -61,6 +70,21 @@ function pathState(token, dirs) {
 }
 
 /**
+ * 'branche', 'chemin' or null. `feat/x` names a branch, but `docs/x` and
+ * `test/x` are folders too: an existing branch or path is never reported, a
+ * file name (`docs/x.md`) or a name under an existing folder is a path.
+ */
+function kindOf(token, here, branches, hasGit) {
+  if (BRANCH.test(token)) {
+    if (branches.has(token) || here.some((d) => fs.existsSync(path.join(d, token)))) return null;
+    const first = token.split('/')[0];
+    const folder = here.some((d) => fs.existsSync(path.join(d, first)));
+    if (!NAMED_EXT.test(token) && !folder) return hasGit ? 'branche' : null;
+  }
+  return pathState(token, here) === 'missing' ? 'chemin' : null;
+}
+
+/**
  * [{ kind: 'chemin'|'branche', token, line, text }] for the hand-written part
  * of `raw`, checked against the folders `dirs` the page covers.
  */
@@ -72,15 +96,9 @@ function staleRefs(raw, dirs) {
   const seen = new Set();
   const out = [];
   for (const q of quoted(raw)) {
-    const token = q.token.replace(/[.:]+$/, '').replace(/:\d+(-\d+)?$/, '');
+    const token = bare(q.token);
     if (!token || NOT_A_PATH.test(token) || seen.has(token)) continue;
-    let kind = null;
-    const state = pathState(token, here);
-    // `feat/x` names a branch unless it is a file (`docs/x.md`) or a folder that exists.
-    if (BRANCH.test(token) && !HAS_EXT.test(token)) {
-      const folder = here.some((d) => fs.existsSync(path.join(d, token)));
-      if (known.length && !branches.has(token) && !folder) kind = 'branche';
-    } else if (state === 'missing') kind = 'chemin';
+    const kind = kindOf(token, here, branches, known.length > 0);
     if (!kind) continue;
     seen.add(token);
     out.push({ kind, token, line: q.line, text: q.text });

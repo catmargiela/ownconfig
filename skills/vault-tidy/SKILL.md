@@ -45,11 +45,14 @@ note you merely find unimportant. Do not touch the frontmatter nor the
 
 ## 3. Show, then wait
 
-Give the list grouped by the four kinds, one line per change: what, where
-(line), why. Then the size of the page before and after. Nothing found: say the
+Give the list grouped by the four kinds, numbered. For each change: what, where
+(line), why, and the note itself quoted word for word — every note that would
+be removed, merged or moved. A change whose text the user has not seen cannot
+be accepted. Then the size of the page before and after. Nothing found: say the
 page is clean and stop.
 
-Ask which changes to apply: all, some, none. Wait for the answer.
+Only after that list, ask which changes to apply: all, some (by number), none.
+Wait for the answer.
 
 ## 4. Apply
 

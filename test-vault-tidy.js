@@ -50,7 +50,9 @@ Voir \`README.md\`, \`docs/guide\`, \`docs/OLD.md\` et \`src/lib/cart.ts:12\`.
 Notes perso : \`~/notes/kept.md\` et \`~/notes/lost.md\`.
 Serveur : \`/etc/caddy/Caddyfile\`, \`deploy/.env\`, \`https://example.com/a/b\`, \`npm run build\`, \`foo/<id>/bar\`.
 Branches : \`feat/cart\` (en cours), \`feat/checkout\` (fusionnée), \`docs/guide\`.
-Encore \`src/lib/basket.ts\`.
+Encore \`src/lib/basket.ts\`, \`src/lib/basket.ts#L3-L9\`.
+Positions : \`src/lib/cart.ts:12:5\`, \`src/lib/cart.ts#L12\`, \`README.md:3-9.\`
+Ambigus : \`release/1.0\`, \`docs/old-guide\`.
 
 ## Sessions
 
@@ -61,11 +63,19 @@ Encore \`src/lib/basket.ts\`.
 group('Références disparues');
 const refs = R.staleRefs(page, [repo]);
 const tokens = (kind) => refs.filter((r) => r.kind === kind).map((r) => r.token);
-check('fichiers du dépôt et du dossier personnel qui n\'existent plus', tokens('chemin'), ['src/lib/basket.ts', 'docs/OLD.md', '~/notes/lost.md']);
+check('fichiers du dépôt et du dossier personnel qui n\'existent plus', tokens('chemin'), ['src/lib/basket.ts', 'docs/OLD.md', '~/notes/lost.md', 'docs/old-guide']);
+check('ligne, colonne, ancre : le fichier qui existe n\'est pas signalé', refs.some((r) => /cart\.ts|README/.test(r.token)), false);
 check('numéro de ligne dans le fichier, et la ligne citée', [refs[0].line, page.split('\n')[refs[0].line - 1].startsWith('Le panier est dans')], [9, true]);
 check('jamais signalés : serveur, dossier inconnu, URL, commande, gabarit, frontmatter, bloc géré',
   refs.some((r) => /caddy|\.env|example|npm|<id>|frontmatter|in-region/.test(r.token)), false);
-if (HAS_GIT) check('branche absente signalée ; présente, ou dossier du même nom : non', tokens('branche'), ['feat/checkout']);
+if (HAS_GIT) check('branche absente signalée ; présente, ou dossier du même nom : non', tokens('branche'), ['feat/checkout', 'release/1.0']);
+const odd = R.staleRefs(`﻿---\r\nnote: \`src/lib/in-frontmatter.ts\`\r\n--- \r\n\r\nVoir \`src/lib/gone.ts\`.\r\n`, [repo]);
+check('BOM, CRLF, espace après --- : le frontmatter reste ignoré', odd.map((r) => [r.token, r.line]), [['src/lib/gone.ts', 5]]);
+check('bloc géré jamais refermé : la suite est ignorée', R.staleRefs('`src/lib/a1.ts`\n<!-- claude:journal:start -->\n`src/lib/a2.ts`\n', [repo]).map((r) => r.token), ['src/lib/a1.ts']);
+const bare = path.join(TMP, 'no-git');
+fs.mkdirSync(path.join(bare, 'src'), { recursive: true });
+check('dossier sans dépôt : chemins jugés, aucune branche signalée',
+  R.staleRefs('`src/gone.ts` et `feat/checkout`', [bare]).map((r) => [r.kind, r.token]), [['chemin', 'src/gone.ts']]);
 check('chaque référence une seule fois', refs.filter((r) => r.token === 'src/lib/basket.ts').length, 1);
 check('dossier de la page disparu : rien n\'est jugé', R.staleRefs(page, [path.join(TMP, 'gone')]), []);
 check('page vide ou sans backtick : aucune erreur', [R.staleRefs('', [repo]), R.staleRefs('# Titre\n\ntexte', [repo])], [[], []]);
