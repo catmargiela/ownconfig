@@ -133,8 +133,22 @@ function checkPython() {
   return [ok ? item('OK', 'Moteur token-saver', ok) : item('WARN', 'Moteur token-saver', 'aucun python >= 3.10 : compression Node seule')];
 }
 
+/** Is every project page reachable? Read-only; an inactive vault is not a fault. */
+function checkVault() {
+  const lib = (name) => require(path.join(REPO, 'hooks', 'lib', 'vault', name));
+  const status = lib('store.js').vaultStatus();
+  if (!status.ok) return [item('OK', 'Vault', `inactif : ${lib('store.js').printable(status.why)}`)];
+  const a = lib('audit.js').auditVault();
+  const notes = [
+    [a.sansChemin.length, 'sans chemin'], [a.doublons.length, 'doublon(s)'], [a.horsProjet.length, 'hors projet'],
+  ].filter(([n]) => n > 0).map(([n, label]) => `${n} ${label}`);
+  return [notes.length
+    ? item('WARN', 'Vault', `${a.counts.projets} pages : ${notes.join(', ')} (node ~/.claude-config/vault-lint.js)`)
+    : item('OK', 'Vault', `${a.counts.projets} pages, toutes rattachées à un projet`)];
+}
+
 function runChecks() {
-  return [checkLinks, checkSettings, checkPlugin, checkRepo, checkDispatch, checkPython].flatMap((f) => {
+  return [checkLinks, checkSettings, checkPlugin, checkRepo, checkDispatch, checkPython, checkVault].flatMap((f) => {
     try { return f(); } catch (e) { return [item('FAIL', f.name, e.message)]; }
   });
 }

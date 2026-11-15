@@ -14,12 +14,11 @@ const crypto = require('crypto');
 
 const VAULT = process.env.CC_VAULT || path.join(os.homedir(), 'Documents', 'Obsidian Vault');
 const ROOT = path.join(VAULT, 'Claude');
-const DIRS = { projets: path.join(ROOT, 'Projets'), journal: path.join(ROOT, 'Journal'), profil: path.join(ROOT, 'Profil') };
+const DIRS = { projets: path.join(ROOT, 'Projets'), journal: path.join(ROOT, 'Journal') };
 
 // Injection budget at session start: what separates useful memory from a tax.
 const BUDGET = {
   projet: Number(process.env.CC_VAULT_BUDGET_PROJET) || 3000,
-  profil: Number(process.env.CC_VAULT_BUDGET_PROFIL) || 1500,
   journal: Number(process.env.CC_VAULT_BUDGET_JOURNAL) || 1200,
 };
 
@@ -45,6 +44,10 @@ const CONFIG_REPO = (() => {
 })();
 
 const insideConfigRepo = (real) => real === CONFIG_REPO || real.startsWith(CONFIG_REPO + path.sep);
+
+/** Text safe to print: a file or folder name may carry terminal escape sequences. */
+const printable = (s, multiline = false) =>
+  String(s).replace(multiline ? /[\x00-\x08\x0b-\x1f\x7f]/g : /[\x00-\x1f\x7f]/g, '?');
 
 const debug = (msg) => { if (process.env.CCX_DEBUG === '1') process.stderr.write(`[vault] ${msg}\n`); };
 
@@ -183,7 +186,7 @@ function stripFrontmatter(content) {
 }
 
 module.exports = {
-  VAULT, ROOT, DIRS, BUDGET, vaultStatus, enabled, ensureDirs, debug,
+  VAULT, ROOT, DIRS, BUDGET, vaultStatus, enabled, ensureDirs, debug, printable,
   read, write, hash, withLock, writeGuarded,
   upsertRegion, readRegion, stripRegions, stripFrontmatter,
 };

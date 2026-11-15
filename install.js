@@ -48,6 +48,7 @@ const SCRIPTS = [
   ['statusline.sh', path.join(CLAUDE, 'statusline.sh')],
   ['gh-mcp-headers.sh', path.join(CLAUDE, 'bin', 'gh-mcp-headers.sh')],
   ['config-doctor.js', path.join(CLAUDE, 'bin', 'config-doctor.js')],
+  ['vault-page.js', path.join(CLAUDE, 'bin', 'vault-page.js')],
 ];
 
 /** Lien symbolique : la source de vérité reste le dépôt, les édits sont immédiats. */
