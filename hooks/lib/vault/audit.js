@@ -11,7 +11,7 @@ const path = require('path');
 const { ROOT, DIRS, BUDGET, read, readRegion, printable } = require('./store');
 const { declaredPaths, candidatePages, canHavePage, withPageCache } = require('./identity');
 const { resolveProjectFile, memoryName } = require('./naming');
-const { cleanForInjection, buildInjection } = require('./inject');
+const { pagePart, buildInjection } = require('./inject');
 
 const BIG_PAGE = 12000;
 const tok = (s) => Math.round((s || '').length / 4);
@@ -35,9 +35,17 @@ function conflictsOf(pages) {
   return [...seen.values()];
 }
 
+/** Every note of the vault folder, sub-folders included (a link may point anywhere in it). */
+function allNotes() {
+  try {
+    return fs.readdirSync(ROOT, { recursive: true }).filter((f) => String(f).endsWith('.md'))
+      .map((f) => path.join(ROOT, String(f)));
+  } catch { return []; }
+}
+
 /** Links to pages that do not exist, across the whole vault. */
 function brokenLinks(files) {
-  const known = new Set(files.map(nameOf));
+  const known = new Set([...files, ...allNotes()].map(nameOf));
   const out = [];
   for (const f of files) {
     for (const m of read(f).matchAll(/\[\[([^\]|#]+)/g)) {
@@ -51,15 +59,17 @@ function brokenLinks(files) {
 /** One record per project page: identity, size, and what it costs at session start. */
 function pageRecord(file) {
   const raw = read(file);
-  const clean = cleanForInjection(raw);
+  const part = pagePart(file);
+  const clean = part.text;
   const paths = declaredPaths(raw);
   // A hand-written page about a folder outside git is deliberate: only an empty one is reported.
   const excluded = paths.map((dir) => ({ dir, ...canHavePage(dir) }))
     .filter((c) => !c.ok && (c.code !== 'no-git' || !clean));
   return {
     name: nameOf(file), paths, excluded,
-    written: clean.length,
-    injected: Math.min(clean.length, BUDGET.projet),
+    written: part.written,
+    injected: part.text.length,
+    mode: part.mode,
     raw: raw.length,
     hasSessions: Boolean(readRegion(raw, 'journal').trim()),
     startTokens: paths.length ? tok(buildInjection(paths[0])) : 0,
@@ -82,7 +92,7 @@ function scanVault() {
     doublons: conflictsOf(pages),
     horsProjet: pages.filter((p) => p.excluded.length).map((p) => ({ name: p.name, why: p.excluded[0].why })),
     muettes: pages.filter((p) => !p.written).map((p) => p.name),
-    tronquees: pages.filter((p) => p.written > BUDGET.projet).map((p) => ({ name: p.name, written: p.written })),
+    resumees: pages.filter((p) => p.mode === 'sommaire').map((p) => ({ name: p.name, written: p.written, injected: p.injected })),
     grosses: pages.filter((p) => p.raw > BIG_PAGE).map((p) => ({ name: p.name, raw: p.raw })),
     inutilisees: pages.filter((p) => !p.hasSessions).map((p) => p.name),
     liensCasses: brokenLinks([...projets, ...journaux, ...listMd(ROOT)]),
@@ -95,7 +105,7 @@ function projectReport(dir) {
   const file = resolveProjectFile(dir);
   const exists = fs.existsSync(file);
   const raw = exists ? read(file) : '';
-  const written = cleanForInjection(raw).length;
+  const part = pagePart(file);
   const injection = buildInjection(dir) || '';
   return {
     dir,
@@ -104,9 +114,9 @@ function projectReport(dir) {
     paths: declaredPaths(raw),
     canHavePage: canHavePage(dir),
     conflict: candidatePages(dir).map((c) => nameOf(c.file)),
-    written,
-    injected: Math.min(written, BUDGET.projet),
-    truncated: written > BUDGET.projet,
+    written: part.written,
+    injected: part.text.length,
+    summarised: part.mode === 'sommaire',
     budget: BUDGET.projet,
     lastSession: injection.includes('### Dernière session'),
     startTokens: tok(injection),

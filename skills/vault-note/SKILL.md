@@ -66,10 +66,13 @@ page with `Write`: an erased note cannot be recovered.
 - The details of a debugging session that ended well.
 - A generality true for any project ("write tests").
 
-Only the beginning of a page is injected at session start
-(`node ~/.claude-config/vault-lint.js --project` shows how much). Put what
-matters most first, and replace an outdated note instead of adding a second one
-that contradicts it.
+A page longer than the budget is injected as a summary at session start: each
+`##` section with its title and first lines
+(`node ~/.claude-config/vault-lint.js --project --show` shows it). So give every
+section a title that says what it holds, put what matters most first in it, and
+replace an outdated note instead of adding a second one that contradicts it.
+When the injected context is a summary, read the relevant section of the page
+before working on that subject.
 
 ## Before a compaction
 

@@ -26,7 +26,9 @@ In plain words, problems first, no jargon:
 1. **Which page is used** for this folder, and the folders it covers. No page:
    say why, and that notes go to the journal.
 2. **How much Claude receives**: characters written against characters
-   injected. If the page is cut, say that only its beginning is read.
+   injected. If it says summary, the page is longer than the budget: Claude
+   gets its table of contents with the first lines of each section, and reads
+   the page itself for the detail.
 3. **Whether the last session's results are injected.**
 4. **The vault as a whole**, from the `Vault` line: pages without folder,
    duplicates, pages for folders that are not projects.
@@ -38,7 +40,6 @@ Then, only if something is wrong, one line per problem with its fix:
 | A page without `chemin:` | add the key to its frontmatter with the folder(s) it covers |
 | Two pages for one folder | merge the empty one into the written one, then delete it |
 | A page for a folder that is not a project | delete it once the user has confirmed |
-| A page cut at the budget | put what matters first, remove what is outdated |
 
 For the details of every page: `node ~/.claude-config/vault-lint.js --verbose`.
 To see the exact text injected: add `--show` to the first command, and show it

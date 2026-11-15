@@ -291,6 +291,11 @@ de navigation ou un bloc `dataview` sont retirés avant injection : ils coûtent
 tokens à chaque session et n'apprennent rien au modèle. Une page qui ne contient
 que des placeholders injecte exactement zéro caractère.
 
+**Page plus longue que le budget.** Elle n'est pas coupée : elle est injectée en
+sommaire — son introduction, puis chaque section avec son titre, sa taille et ses
+premières lignes, et le chemin de la page pour lire le détail. Rien n'est
+reformulé. `node vault-lint.js --project --show` montre le texte exact.
+
 Budgets, en caractères : `CC_VAULT_BUDGET_PROJET` (3000),
 `CC_VAULT_BUDGET_JOURNAL` (1200).
 Autre vault : `CC_VAULT=/chemin`. Couper : `CC_VAULT_DISABLED=1`.

@@ -9,6 +9,7 @@ const path = require('path');
 const { DIRS, BUDGET, read, stripRegions, stripFrontmatter } = require('./store');
 const { memoryName, resolveProjectFile, journalFile } = require('./naming');
 const { sessionsOf } = require('./dashboard');
+const { summarize } = require('./summary');
 
 const RECENT_RESULTS = 3;
 
@@ -27,11 +28,31 @@ function cleanForInjection(raw) {
   const parts = t.split(/^(##+ .*)$/m);
   const preamble = parts.shift();
   if (preamble && preamble.trim()) out.push(preamble.trim());
-  for (let i = 0; i < parts.length; i += 2) {
+  const kept = [];
+  let below = 0; // level of the nearest kept heading after this one
+  // Backwards: an empty heading stays only when a kept sub-heading follows it.
+  for (let i = parts.length - 2; i >= 0; i -= 2) {
+    const level = parts[i].match(/^#+/)[0].length;
     const body = (parts[i + 1] || '').trim();
-    if (body) out.push(`${parts[i]}\n${body}`);
+    if (!body && below <= level) continue;
+    kept.unshift(body ? `${parts[i]}\n${body}` : parts[i]);
+    below = level;
   }
-  return out.join('\n\n').replace(/\n{3,}/g, '\n\n').trim();
+  return [...out, ...kept].join('\n\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+/**
+ * Project part of the injection for a page file: the page itself when it fits
+ * the budget, its summary otherwise (summary.js).
+ */
+function pagePart(file) {
+  const clean = cleanForInjection(read(file));
+  const whole = clean.length <= BUDGET.projet;
+  return {
+    text: whole ? clean : summarize(clean, BUDGET.projet, file),
+    written: clean.length,
+    mode: !clean ? 'vide' : whole ? 'entier' : 'sommaire',
+  };
 }
 
 /** Cuts at a section start, never mid-sentence. */
@@ -73,8 +94,8 @@ function buildInjection(cwd) {
   const name = memoryName(cwd);
   const parts = [];
 
-  const projet = cleanForInjection(read(resolveProjectFile(cwd)));
-  if (projet) parts.push(`### Contexte du projet ${name}\n` + projet.slice(0, BUDGET.projet));
+  const projet = pagePart(resolveProjectFile(cwd)).text;
+  if (projet) parts.push(`### Contexte du projet ${name}\n` + projet);
 
   const jbody = journalSummary(latestJournal(name));
   if (jbody) parts.push('### Dernière session\n' + tailSections(jbody, BUDGET.journal));
@@ -87,4 +108,4 @@ function buildInjection(cwd) {
     '</contexte-vault>'].join('\n') + '\n';
 }
 
-module.exports = { cleanForInjection, tailSections, buildInjection, journalSummary };
+module.exports = { cleanForInjection, pagePart, tailSections, buildInjection, journalSummary };
