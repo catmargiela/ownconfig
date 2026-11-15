@@ -39,7 +39,7 @@ function printProject(dir) {
     console.log(`  Page    : Projets/${r.name}.md`);
     console.log(`  Couvre  : ${r.paths.length ? r.paths.map(tilde).join(', ') : '(aucun `chemin:` — trouvée par le nom du dossier seulement)'}`);
     console.log(`  Contenu : ${r.written} car. écrits, ${r.injected} injectés` +
-      (r.truncated ? `  ⚠ coupée au budget de ${r.budget}` : ''));
+      (r.summarised ? `  (sommaire : la page dépasse le budget de ${r.budget})` : ''));
   } else {
     console.log(`  Page    : aucune${r.canHavePage.ok ? ' (créée à la première session qui édite un fichier)' : ` — ${r.canHavePage.why}`}`);
   }
@@ -69,13 +69,14 @@ function printVault() {
   bloc('DOUBLONS — plusieurs pages pour un même dossier', a.doublons, (d) => `${d.pages.join(', ')} → ${d.winner} est utilisée`);
   bloc('PAGES HORS PROJET — dossier qui ne devrait pas avoir de page', a.horsProjet, (p) => `Projets/${p.name}.md : ${p.why}`);
   bloc('PAGES MUETTES — que des placeholders, injectent zéro', a.muettes, (n) => `Projets/${n}.md`);
-  bloc('PAGES TRONQUÉES — écrit mais pas injecté en entier', a.tronquees, (p) => `Projets/${p.name}.md : ${p.written} car. pour un budget de ${a.budget}`);
   bloc('PAGES VOLUMINEUSES — relire et élaguer', a.grosses, (p) => `Projets/${p.name}.md : ${p.raw} car.`);
   bloc('LIENS CASSÉS', a.liensCasses, (l) => `${store.printable(l.page)} → [[${store.printable(l.target)}]]`);
   bloc('PAGES PROJET SANS SESSION ENREGISTRÉE', a.inutilisees, (n) => `Projets/${n}.md`);
 
   const total = a.sansChemin.length + a.doublons.length + a.horsProjet.length + a.muettes.length +
-    a.tronquees.length + a.grosses.length + a.liensCasses.length + a.inutilisees.length;
+    a.grosses.length + a.liensCasses.length + a.inutilisees.length;
+  bloc('PAGES INJECTÉES EN SOMMAIRE — plus longues que le budget, rien à corriger', a.resumees,
+    (p) => `Projets/${p.name}.md : ${p.written} car. écrits, ${p.injected} injectés`);
   const pire = a.pages.length ? Math.max(...a.pages.map((p) => p.startTokens)) : 0;
   console.log(`\n  ${total === 0 ? 'Aucun problème détecté.' : total + ' point(s) à regarder.'}`);
   console.log(`  Session la plus chère : ~${pire} tokens de contexte injecté.\n`);

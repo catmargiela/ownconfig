@@ -328,13 +328,42 @@ check('refus : aucune page créée', fs.readdirSync(P).some((f) => /home/.test(f
 check('vault désactivé : sortie 2, rien sur stdout', (({ status, stdout }) => [status, stdout])(
   run('bin/vault-page.js', [front], { CC_VAULT_DISABLED: '1' })), [2, '']);
 
+group('Sommaire : une page longue est annoncée, pas coupée');
+check('titre sans texte mais avec des sous-sections : gardé ; sans rien dessous : retiré',
+  v.cleanForInjection('## Parent\n\n### Enfant\n\ntexte\n\n## Vide\n\n### Vide aussi\n\n## Fin\n\nfin'), '## Parent\n\n### Enfant\ntexte\n\n## Fin\nfin');
+const SUM = require(path.join(LIB, 'vault', 'summary.js'));
+const INJ = require(path.join(LIB, 'vault', 'inject.js'));
+const longPage = ['Intro du projet.', '## Stack\nbun, Tauri.', `## Décisions\n${'- Une décision et sa raison.\n'.repeat(150)}`,
+  `## Prod\n### Serveur\n${'- Un fait de prod.\n'.repeat(120)}### Domaine\n- un domaine`, '## Pièges\n- Le piège du bas de page.'].join('\n\n');
+const sum = SUM.summarize(longPage, 3000, '/vault/Projets/Long.md');
+check('page courte : rendue telle quelle', SUM.summarize('## A\ncourt', 3000, '/x.md'), '## A\ncourt');
+check('jamais plus long que le budget', [sum.length <= 3000, sum.length > 2500], [true, true]);
+check('annonce le sommaire et donne le chemin de la page', [sum.startsWith('Page trop longue'), sum.includes('/vault/Projets/Long.md')], [true, true]);
+check('toutes les sections annoncées, même celles du bas', ['## Stack', '## Décisions (', '## Prod (', '## Pièges'].map((t) => sum.includes(t)), [true, true, true, true]);
+check('petites sections entières, grandes coupées à une fin de ligne avec leur taille',
+  [sum.includes('## Stack\nbun, Tauri.'), sum.includes('- Le piège du bas de page.'), /## Décisions \(\d{4} car\.\)\n(- Une décision et sa raison\.\n)+…/.test(sum)],
+  [true, true, true]);
+check('sous-sections d\'une section coupée listées', sum.includes('Sous-sections : Serveur · Domaine'), true);
+const many = SUM.summarize(Array.from({ length: 200 }, (_, i) => `## Section ${i}\n${'texte '.repeat(30)}`).join('\n\n'), 3000, '/x.md');
+check('200 sections : titres seuls, budget tenu, reste compté', [many.length <= 3000, many.includes('## Section 0 ('), /… \+\d+ section\(s\)$/.test(many)], [true, true, true]);
+check('une seule ligne énorme : coupée à un mot, budget tenu', SUM.summarize(`## A\n${'mot '.repeat(2000)}`, 3000, '/x.md').length <= 3000, true);
+const longRepo = mkRepo(path.join(TMP, 'long-repo'));
+const longFile = path.join(P, 'Long.md');
+fs.writeFileSync(longFile, `---\nchemin: ${longRepo}\n---\n\n# Long\n\n${longPage}\n`);
+const injLong = v.buildInjection(longRepo) || '';
+check('injection : sommaire avec le vrai chemin, section du bas visible',
+  [injLong.includes(`Texte complet : ${longFile}`), injLong.includes('## Pièges'), INJ.pagePart(longFile).mode], [true, true, 'sommaire']);
+check('page sous le budget : injectée entière', INJ.pagePart(shared).mode, 'entier');
+
 group('Diagnostic : vault-lint');
 const bigRepo = mkRepo(path.join(TMP, 'big-repo'));
 fs.writeFileSync(path.join(P, 'Big.md'), `---\nchemin: ${bigRepo}\n---\n\n# Big\n\n## Décisions\n\n${'Une décision. '.repeat(400)}\n`);
 const lp = run('vault-lint.js', ['--project', bigRepo]).stdout;
-check('projet : page utilisée, écrit contre injecté, coupe signalée',
-  [lp.includes('Page    : Projets/Big.md'), /5\d{3} car\. écrits, 3000 injectés/.test(lp), lp.includes('coupée au budget de 3000')],
-  [true, true, true]);
+const injectedSize = Number((lp.match(/écrits, (\d+) injectés/) || [])[1]);
+check('projet : page utilisée, écrit contre injecté, sommaire signalé',
+  [lp.includes('Page    : Projets/Big.md'), /5\d{3} car\. écrits/.test(lp), injectedSize > 2000 && injectedSize <= 3000,
+    lp.includes('sommaire : la page dépasse le budget de 3000')],
+  [true, true, true, true]);
 check('projet sans page : raison donnée', run('vault-lint.js', ['--project', loose]).stdout.includes('aucune — hors dépôt git'), true);
 check('--show : texte exact injecté', run('vault-lint.js', ['--project', front, '--show']).stdout.includes('<contexte-vault>\n'), true);
 fs.writeFileSync(path.join(P, 'Orpheline.md'), '# Orpheline\n\n## Décisions\n\nPage riche sans chemin.\n');
