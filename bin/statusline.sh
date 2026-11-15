@@ -3,8 +3,9 @@
 # dir · branch(dirty) · model(effort) · context gauge · 5h + weekly limits · cost · duration · +/- lines
 # · characters saved by output compression in this session
 # Offline, no secrets. Reads the statusLine JSON payload from stdin. Its only
-# write: the usage limits, to state/ccx/limits.json, for the quota-alert hook
-# (hooks only see what the status line is given).
+# writes, both under state/ccx/: the usage limits (limits.json, for the
+# quota-alert hook) and the cost of the conversation (<session>.cost.json, for
+# the work-session commands). Hooks and commands only see what the status line is given.
 input=$(cat)
 STATE="$HOME/.claude/state/ccx"
 
@@ -113,6 +114,16 @@ if [[ "$sid" =~ ^[A-Za-z0-9_-]{1,64}$ ]] && [ -f "$STATE/compress-stats.jsonl" ]
       if (n >= 1e6) printf "%.1fM", n / 1e6; else if (n >= 1e4) printf "%.0fk", n / 1e3
       else if (n >= 1e3) printf "%.1fk", n / 1e3; else printf "%d", n }')"
     out+="${SEP}${CYAN}⇣${saved}${R}"
+  fi
+fi
+
+# --- cost of the conversation, handed to /startsession and /endsession (bin/work-session.js) ---
+if [[ "$sid" =~ ^[A-Za-z0-9_-]{1,64}$ ]] && [ -n "$cost" ]; then
+  snap=$(jq -cn --arg c "$cost" --arg a "$added" --arg r "$removed" \
+    '{cost: ($c | tonumber? // 0), added: ($a | tonumber? // 0), removed: ($r | tonumber? // 0)}' 2>/dev/null)
+  if [ -n "$snap" ] && [ "$snap" != "$(cat "$STATE/$sid.cost.json" 2>/dev/null)" ]; then
+    mkdir -p "$STATE" 2>/dev/null && tmp=$(mktemp "$STATE/$sid.cost.json.XXXXXX" 2>/dev/null) \
+      && { printf '%s' "$snap" > "$tmp" && mv -f "$tmp" "$STATE/$sid.cost.json" || rm -f "$tmp"; } 2>/dev/null
   fi
 fi
 

@@ -108,4 +108,4 @@ function buildInjection(cwd) {
     '</contexte-vault>'].join('\n') + '\n';
 }
 
-module.exports = { cleanForInjection, pagePart, tailSections, buildInjection, journalSummary };
+module.exports = { cleanForInjection, pagePart, tailSections, buildInjection, journalSummary, latestJournal };

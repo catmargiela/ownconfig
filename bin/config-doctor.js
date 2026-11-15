@@ -147,8 +147,18 @@ function checkVault() {
     : item('OK', 'Vault', `${a.counts.projets} pages, toutes rattachées à un projet`)];
 }
 
+/** Vault history: present and recent when the vault is on. */
+function checkVaultHistory() {
+  const store = require(path.join(REPO, 'hooks', 'lib', 'vault', 'store.js'));
+  if (!store.vaultStatus().ok) return [item('OK', 'Historique vault', 'vault inactif')];
+  if (String(process.env.CC_VAULT_HISTORY || '').toLowerCase() === 'off') return [item('WARN', 'Historique vault', 'coupé (CC_VAULT_HISTORY=off)')];
+  const s = require(path.join(REPO, 'hooks', 'lib', 'vault', 'history.js')).summary();
+  if (!s) return [item('WARN', 'Historique vault', 'aucun commit encore (créé à la prochaine fin de réponse)')];
+  return [item('OK', 'Historique vault', `${s.commits} commit(s), dernier ${s.last.slice(0, 16).replace('T', ' ')}`)];
+}
+
 function runChecks() {
-  return [checkLinks, checkSettings, checkPlugin, checkRepo, checkDispatch, checkPython, checkVault].flatMap((f) => {
+  return [checkLinks, checkSettings, checkPlugin, checkRepo, checkDispatch, checkPython, checkVault, checkVaultHistory].flatMap((f) => {
     try { return f(); } catch (e) { return [item('FAIL', f.name, e.message)]; }
   });
 }

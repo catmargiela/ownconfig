@@ -296,6 +296,29 @@ sommaire — son introduction, puis chaque section avec son titre, sa taille et 
 premières lignes, et le chemin de la page pour lire le détail. Rien n'est
 reformulé. `node vault-lint.js --project --show` montre le texte exact.
 
+**Sessions de travail.** `/startsession` ouvre une session sur le projet : heure,
+branche, rappel de la session précédente (heures, coût, bilan) et des derniers
+résultats du journal. `/endsession` la ferme : durée, coût et lignes modifiées
+depuis l'ouverture, bilan écrit dans le journal du jour, puis Claude note seul
+dans la page du projet ce qui est durable et dit ce qu'il a noté. Une session
+est une conversation Claude Code. Le coût vient de la barre de statut, seul
+endroit où Claude Code le donne : elle l'enregistre dans
+`~/.claude/state/ccx/<session>.cost.json`. Le registre des sessions est local
+(`worksessions.jsonl`, même dossier). Sans `/startsession`, `/endsession` donne
+les chiffres de toute la conversation.
+
+**Historique.** Le dossier `Claude/` du vault est versionné dans un dépôt git
+hors du vault (`~/.claude/state/vault-history.git`) : un commit à chaque fin de
+réponse et avant chaque compaction, quand quelque chose a changé. Local
+uniquement, aucun remote. Obsidian ne voit rien. Couper : `CC_VAULT_HISTORY=off`.
+
+```bash
+H="git --git-dir=$HOME/.claude/state/vault-history.git --work-tree=$HOME/Documents/Obsidian\ Vault/Claude"
+eval "$H log --oneline -- Projets/ma-page.md"          # versions d'une page
+eval "$H show <commit>:Projets/ma-page.md"             # la lire telle qu'elle était
+eval "$H checkout <commit> -- Projets/ma-page.md"      # la restaurer
+```
+
 Budgets, en caractères : `CC_VAULT_BUDGET_PROJET` (3000),
 `CC_VAULT_BUDGET_JOURNAL` (1200).
 Autre vault : `CC_VAULT=/chemin`. Couper : `CC_VAULT_DISABLED=1`.
