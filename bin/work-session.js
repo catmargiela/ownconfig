@@ -37,6 +37,9 @@ function main() {
   const result = action === 'start' ? ws.start(sid, cwd) : ws.end(sid, cwd, printable(stdinText(), true));
   if (flags.includes('--json')) process.stdout.write(JSON.stringify(result) + '\n');
   else process.stdout.write(printable(action === 'start' ? ws.describeStart(result) : ws.describeEnd(result), true) + '\n');
+  if (action === 'end' && result.bilan.includes('[secret retiré]')) {
+    process.stderr.write('Un secret a été retiré du bilan avant écriture.\n');
+  }
 }
 
 if (require.main === module) main();

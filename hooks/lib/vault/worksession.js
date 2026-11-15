@@ -17,11 +17,13 @@ const { journalTemplate } = require('./pages');
 const { latestJournal } = require('./inject');
 const { sessionsOf } = require('./dashboard');
 const { safe } = require('./render');
+const { SECRET_PATTERNS, isPlaceholder } = require('../secret-guard');
 
 const LEDGER = path.join(STATE_DIR, 'worksessions.jsonl');
 const LEDGER_MAX = 512 * 1024;
 const BILAN_MAX = 1500;
 const RECENT = 3;
+const BRANCH_MAX = 100;
 const ZERO = { cost: 0, added: 0, removed: 0 };
 
 const validSid = (sid) => /^[A-Za-z0-9_-]{1,64}$/.test(String(sid || ''));
@@ -33,11 +35,27 @@ function costOf(sid) {
   return s && typeof s === 'object' ? { cost: num(s.cost), added: num(s.added), removed: num(s.removed) } : null;
 }
 
-const delta = (now, base) => ({
-  cost: Math.max(0, now.cost - base.cost),
-  added: Math.max(0, now.added - base.added),
-  removed: Math.max(0, now.removed - base.removed),
-});
+/** Figures since `base`. A counter below its baseline restarted from zero: it is then counted whole. */
+function delta(now, base) {
+  const from = now.cost < base.cost ? ZERO : base;
+  return {
+    cost: now.cost - from.cost,
+    added: Math.max(0, now.added - from.added),
+    removed: Math.max(0, now.removed - from.removed),
+  };
+}
+
+/**
+ * The closing summary ends up in the journal and in the vault history, which
+ * never forgets: anything shaped like a credential is removed first.
+ */
+function redact(text) {
+  let out = String(text || '');
+  for (const { kind, re } of SECRET_PATTERNS) {
+    out = out.replace(re, (m) => (kind === 'clé privée' || !isPlaceholder(m) ? '[secret retiré]' : m));
+  }
+  return out;
+}
 
 function readLedger() {
   return store.read(LEDGER).split('\n').filter(Boolean)
@@ -62,9 +80,11 @@ function append(entry) {
  */
 function previous(project, sid) {
   const mine = readLedger().filter((e) => e.project === project && e.sid !== sid);
-  const start = mine.filter((e) => e.type === 'start').pop();
-  if (!start) return null;
-  const end = mine.filter((e) => e.type === 'end' && e.sid === start.sid).pop();
+  const at = mine.map((e) => e.type).lastIndexOf('start');
+  if (at < 0) return null;
+  const start = mine[at];
+  // Only an end written after this start closes it: a session may be reopened.
+  const end = mine.slice(at + 1).filter((e) => e.type === 'end' && e.sid === start.sid).pop();
   if (end) return { closed: true, startedAt: start.startedAt, endedAt: end.endedAt, cost: end.cost, added: end.added, removed: end.removed, bilan: end.bilan || '' };
   const last = costOf(start.sid);
   return { closed: false, startedAt: start.startedAt, cost: last ? delta(last, start.base || ZERO).cost : null };
@@ -83,7 +103,7 @@ function start(sid, cwd, now = new Date()) {
   const marker = { sid, project, cwd, startedAt: now.toISOString(), base: snap || ZERO };
   writeState(sid, 'worksession', marker);
   append({ type: 'start', ...marker });
-  return { project, startedAt: marker.startedAt, branch: naming.currentBranch(cwd), previous: before, recent: recentResults(project) };
+  return { project, startedAt: marker.startedAt, branch: naming.currentBranch(cwd).slice(0, BRANCH_MAX), previous: before, recent: recentResults(project) };
 }
 
 function journalBody(r) {
@@ -114,7 +134,7 @@ function end(sid, cwd, bilan = '', now = new Date()) {
     startedAt: opened ? marker.startedAt : null,
     endedAt: now.toISOString(),
     cost: d ? d.cost : null, added: d ? d.added : 0, removed: d ? d.removed : 0,
-    bilan: String(bilan || '').trim().slice(0, BILAN_MAX),
+    bilan: redact(bilan).trim().slice(0, BILAN_MAX),
   };
   const journal = writeJournal(result, cwd);
   append({ type: 'end', ...result });
@@ -165,4 +185,4 @@ function describeEnd(r) {
   return lines.join('\n');
 }
 
-module.exports = { start, end, describeStart, describeEnd, validSid, costOf, previous, LEDGER };
+module.exports = { start, end, describeStart, describeEnd, validSid, costOf, previous, redact, LEDGER };

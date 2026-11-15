@@ -45,9 +45,9 @@ const CONFIG_REPO = (() => {
 
 const insideConfigRepo = (real) => real === CONFIG_REPO || real.startsWith(CONFIG_REPO + path.sep);
 
-/** Text safe to print: a file or folder name may carry terminal escape sequences. */
+/** Text safe to print: a file or folder name may carry terminal escape sequences (C0 and C1). */
 const printable = (s, multiline = false) =>
-  String(s).replace(multiline ? /[\x00-\x08\x0b-\x1f\x7f]/g : /[\x00-\x1f\x7f]/g, '?');
+  String(s).replace(multiline ? /[\x00-\x08\x0b-\x1f\x7f-\x9f]/g : /[\x00-\x1f\x7f-\x9f]/g, '?');
 
 const debug = (msg) => { if (process.env.CCX_DEBUG === '1') process.stderr.write(`[vault] ${msg}\n`); };
 

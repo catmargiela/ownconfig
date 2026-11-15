@@ -82,6 +82,25 @@ check('précédente non fermée : signalée avec son dernier coût connu', [s3.p
 check('texte : non fermée', ws.describeStart(s3).includes('non fermée par /endsession — dernier coût connu : 3,50 $'), true);
 check('un autre projet ne voit pas ces sessions', ws.start('sess-4', path.join(TMP, 'other-repo'), at(11, 5)).previous, null);
 
+group('Session relancée, compteur remis à zéro');
+writeState('sess-r', 'cost', { cost: 1, added: 0, removed: 0 });
+ws.start('sess-r', repo, at(9, 0));
+ws.end('sess-r', repo, 'premier tour', at(10, 0));
+ws.start('sess-r', repo, at(14, 0));
+const reopened = ws.previous('acme-shop', 'sess-y');
+check('même conversation rouverte après une fermeture : vue comme ouverte, pas fermée à 10 h',
+  [reopened.closed, ws.describeStart({ project: 'acme-shop', startedAt: at(15, 0).toISOString(), branch: '', previous: reopened, recent: [] }).includes('14:00) non fermée')], [false, true]);
+ws.end('sess-r', repo, 'second tour', at(16, 0));
+const closedAgain = ws.previous('acme-shop', 'sess-y');
+check('refermée : la fin retenue est celle du second tour', [closedAgain.closed, closedAgain.bilan, closedAgain.endedAt > closedAgain.startedAt], [true, 'second tour', true]);
+writeState('sess-z', 'cost', { cost: 9, added: 50, removed: 5 });
+ws.start('sess-z', repo, at(16, 30));
+writeState('sess-z', 'cost', { cost: 2, added: 7, removed: 1 });
+const restarted = ws.end('sess-z', repo, '', at(17, 0));
+check('compteur de coût reparti de zéro : compté en entier, jamais 0 $', [restarted.cost, restarted.added, restarted.removed], [2, 7, 1]);
+const leaked = ws.end('sess-k', repo, `Fait :\n- clé posée : ${'ghp_' + 'a1B2c3D4e5'.repeat(4)}\n- fini`, at(17, 5));
+check('secret dans le bilan : retiré avant écriture', [leaked.bilan.includes('ghp_'), leaked.bilan.includes('[secret retiré]'), read(journalOf()).includes('ghp_')], [false, true, false]);
+
 group('Cas limites');
 writeState('sess-5', 'cost', { cost: 4, added: 1, removed: 1 });
 const e5 = ws.end('sess-5', repo, '', at(12, 0));
@@ -119,19 +138,38 @@ if (HAS_GIT) {
   check('fichiers temporaires exclus', gitH(['ls-tree', '-r', '--name-only', 'HEAD']).split('\n').filter((f) => /tmp|DS_Store/.test(f)), []);
   check('aucun .git dans le vault, aucun remote', [fs.existsSync(path.join(ROOT, '.git')), fs.existsSync(path.join(VAULT, '.git')), gitH(['remote'])], [false, false, '']);
   check('version précédente récupérable', gitH(['show', 'HEAD~1:Projets/demo.md']), '# Demo\n\n- décision A');
-  check('résumé pour le doctor', history.summary().commits, 2);
+  fs.mkdirSync(path.join(HOME, 'bin'), { recursive: true });
+  const marker = path.join(TMP, 'filter-ran');
+  fs.writeFileSync(path.join(HOME, '.gitconfig'), `[filter "evil"]\n\tclean = touch ${marker}; cat\n`);
+  fs.writeFileSync(path.join(ROOT, '.gitattributes'), '* filter=evil\n');
+  fs.appendFileSync(note, '- décision filtrée\n');
+  const inherited = { GIT_DIR: process.env.GIT_DIR, GIT_WORK_TREE: process.env.GIT_WORK_TREE };
+  Object.assign(process.env, { GIT_DIR: path.join(TMP, 'elsewhere.git'), GIT_WORK_TREE: TMP });
+  check('.gitattributes hostile + filtre dans ~/.gitconfig + GIT_DIR hérité : commit fait, filtre jamais lancé',
+    [history.snapshot('test', 'sess-3'), fs.existsSync(marker), fs.existsSync(path.join(TMP, 'elsewhere.git'))], [true, false, false]);
+  for (const [k, val] of Object.entries(inherited)) { if (val === undefined) delete process.env[k]; else process.env[k] = val; }
+  fs.unlinkSync(path.join(ROOT, '.gitattributes'));
+  history.snapshot('test', 'sess-3');
+  const n0 = commits();
+  check('résumé pour le doctor', history.summary().commits, n0);
   process.env.CC_VAULT_HISTORY = 'off';
   fs.appendFileSync(note, '- C\n');
-  check('CC_VAULT_HISTORY=off : rien', [history.snapshot('test'), commits()], [false, 2]);
+  check('CC_VAULT_HISTORY=off : rien', [history.snapshot('test'), commits()], [false, n0]);
   process.env.CC_VAULT_HISTORY = '';
   const d = spawnSync(process.execPath, [path.join(__dirname, 'hooks', 'dispatch.js'), 'stop'],
     { input: JSON.stringify({ session_id: 'vh-e2e', cwd: TMP, hook_event_name: 'Stop' }), encoding: 'utf8',
       env: { ...process.env, CC_CONTEXT_MONITOR: 'off', CCX_NOTIFY: 'off' }, timeout: 20000 });
-  check('fin de réponse réelle via le dispatcher : commit, sortie 0', [d.status, commits()], [0, 3]);
+  check('fin de réponse réelle via le dispatcher : commit, sortie 0', [d.status, commits()], [0, n0 + 1]);
   const broken = spawnSync(process.execPath, [path.join(__dirname, 'hooks', 'dispatch.js'), 'stop'],
     { input: JSON.stringify({ session_id: 'vh-bad', cwd: TMP, hook_event_name: 'Stop' }), encoding: 'utf8',
       env: { ...process.env, CC_VAULT_HISTORY_DIR: path.join(note, 'history.git'), CC_CONTEXT_MONITOR: 'off', CCX_NOTIFY: 'off' }, timeout: 20000 });
   check('dépôt d\'historique inutilisable : la fin de réponse passe quand même', broken.status, 0);
+  const linked = path.join(TMP, 'vault-link');
+  fs.mkdirSync(linked);
+  fs.symlinkSync(path.join(TMP, 'acme-shop'), path.join(linked, 'Claude'));
+  const viaLink = spawnSync(process.execPath, ['-e', "process.stdout.write(String(require('./hooks/lib/vault/history').snapshot('test')))"],
+    { cwd: __dirname, encoding: 'utf8', env: { ...process.env, CC_VAULT: linked, CC_VAULT_HISTORY_DIR: path.join(TMP, 'link.git') } });
+  check('dossier Claude/ qui est un lien : rien enregistré', [viaLink.stdout, fs.existsSync(path.join(TMP, 'link.git'))], ['false', false]);
 } else console.log('    (git absent : historique non testé)');
 
 fs.rmSync(TMP, { recursive: true, force: true });
