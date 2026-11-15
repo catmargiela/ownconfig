@@ -58,11 +58,13 @@ Lancer les agents indépendants en parallèle dans un seul message.
 
 ## Mémoire longue — vault Obsidian
 
-`~/Documents/Obsidian Vault/Claude/` est la mémoire qui survit aux compactions.
-Le contexte du projet et mes préférences y sont réinjectés à chaque session.
+`~/Documents/Obsidian Vault/Claude/` est la mémoire de chaque projet : décisions,
+pièges, état du travail. Sa page est réinjectée au début de chaque session sur ce
+projet. Une règle valable partout va ici, dans ce fichier, et seulement avec mon
+accord.
 
-Y écrire (skill `vault-note`) quand une décision structurante est prise, quand je
-corrige une manière de faire, ou avant de compacter. Ne jamais réécrire une page
+Y écrire (skill `vault-note`) quand une décision structurante est prise sur un
+projet, ou avant de compacter. Ne jamais réécrire une page
 entière avec `Write` : lire, puis `Edit` la section visée. Les blocs
 `<!-- claude:… -->` sont gérés par les hooks, le reste est à moi.
 

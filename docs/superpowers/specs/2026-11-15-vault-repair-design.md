@@ -89,8 +89,9 @@ identity is matched.
 - `chemin:` accepts one path or a YAML list of paths. `resolveProjectFile`
   matches any of them, real paths compared as today. Exact working directory
   still wins over the git root.
-- When two pages declare the same path, the one with real content wins, then the
-  older one; `vault-lint` reports the conflict.
+- When two pages declare the same path, the one with real content wins, then
+  file-name order (file dates are useless: every hook write replaces the file);
+  `vault-lint` reports the conflict.
 
 ### 2. Page creation
 
@@ -124,6 +125,9 @@ under the folder name, with links to a page that no longer exists.
 - New script `bin/vault-page.js`: prints the page path for a directory
   (default: cwd), creating it under the rules above. `--json` adds the resolved
   name, the declared paths and whether the page already existed.
+- A deliberate note may create a page for a folder outside git (the owner has a
+  hand-written page for such a folder); the three other exclusions stay. A
+  hand-written page of a non-git folder is not reported by the lint.
 - When the directory cannot have a page (section 2), the script exits non-zero,
   prints the reason and the path of today's journal. The skill then writes the
   note in that journal only and says so; it never invents a page.

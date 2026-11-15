@@ -1,97 +1,90 @@
 ---
 name: vault-note
-description: Write to the Obsidian vault — project context, a decision made, a working preference, state before compaction. Use when the user says "note ça" / "note this", "retiens ça" / "remember this", "mets ça dans mon vault" / "put this in my vault", before compacting, or when a structural decision has just been made.
+description: Write to the Obsidian vault — a decision made on a project, a verified pitfall, the state of the work before compaction. Use when the user says "note ça" / "note this", "retiens ça" / "remember this", "mets ça dans mon vault" / "put this in my vault", before compacting, or when a structural decision has just been made.
 ---
 
 # Writing to the vault
 
 Reply to the user in French.
 
-The Obsidian vault is long-term memory. A session's context disappears at
-compaction; what is in the vault comes back in every following session.
+The Obsidian vault is the long-term memory of each project. A session's context
+disappears at compaction; what is in the project's page comes back at the start
+of every following session on that project.
 
-Location: `~/Documents/Obsidian Vault/Claude/` (or `$CC_VAULT`).
+## 1. Ask where the note goes — never choose a page yourself
 
-```
-Claude/
-├── Index Claude.md
-├── Profil/
-│   ├── Façon de coder.md    ← injected in EVERY session, all projects
-│   └── Stack.md
-├── Projets/<Projet>.md      ← injected on this project only
-└── Journal/<date> — <Projet>.md
+```bash
+node ~/.claude/bin/vault-page.js
 ```
 
-## Coexistence rule
+It prints the page covering the current folder and creates it when the project
+has none yet. Write in that file and nowhere else.
 
-Blocks delimited by `<!-- claude:xxx:start -->` … `<!-- claude:xxx:end -->`
-are managed by the hooks. **Everything else belongs to the user.**
+- **Never pick or invent a page name**, even when a nicer one comes to mind, and
+  never create a file in `Projets/` by hand. A page the script did not return is
+  not linked to the project's folder: it is never injected, and the note is lost
+  while looking saved.
+- A page may cover several repositories: its frontmatter key `chemin:` lists
+  them. To attach one more folder to an existing page, add it to that list.
+- **Exit code 1**: the folder cannot have a page (home directory, Claude Code's
+  own folder, a session scratchpad). The script prints the path of today's
+  journal instead: write the note there, and tell the user it went to the
+  journal and why.
+- **Exit code 2**: the vault is inactive. Say so and stop; write nothing.
 
-To modify a page: read, edit the target section with `Edit`, never
-rewrite the whole file with `Write`. An accidentally erased note cannot be
-recovered.
+## 2. Which memory for which knowledge
 
-## Where to write what
-
-| Information | Destination |
+| Knowledge | Where |
 |---|---|
-| True across all projects (preference, convention, settled decision) | `Profil/Façon de coder.md` |
-| True for this project only (architecture, pitfall, command) | `Projets/<Projet>.md` |
-| True at a given moment (work state, what remains) | `Journal/<date> — <Projet>.md` |
+| A decision, a pitfall, a command of **this project** | the page returned by the script |
+| The state of the work at a given moment | today's journal, `Journal/<date> — <page name>.md` |
+| A rule or preference true on **every** project | `~/.claude/CLAUDE.md` — see below |
 
-The most frequent misfiling: putting in the profile what only concerns
-one project. The profile is re-read in every session, on every project — it is paid for
-everywhere. When in doubt, write in the project page.
+A preference true everywhere is not yours to write. Show the user the exact line
+you would add to `~/.claude/CLAUDE.md`, and add it only after a clear yes. That
+file is their instructions to every session and it is versioned in a public
+repository.
 
-A structural decision that belongs to a client project repo also deserves an
-ADR in that repo: propose `docs/adr/NNNN-slug.md` from
-`~/.claude-config/rules/templates/adr.md`, and ask before writing into the
-client repo. The vault note stays; the ADR is for the humans on that repo.
+## 3. Coexistence rule
+
+Blocks delimited by `<!-- claude:xxx:start -->` … `<!-- claude:xxx:end -->` are
+managed by the hooks. **Everything else belongs to the user.**
+
+Read the page, then edit the target section with `Edit`. Never rewrite a whole
+page with `Write`: an erased note cannot be recovered.
 
 ## What is worth noting
 
 - **A decision and its reason.** « On est passés à X parce que Y échouait sur Z. »
   The *why* is the only thing the code does not say.
 - **A verified pitfall.** What wasted time, and how to work around it.
-- **A preference expressed by the user.** When they correct a way of
-  doing things, it is durable — noting it avoids having them correct it again.
 - **The state of work in progress**, before compaction or at the end of a session.
 
 ## What is not worth noting
 
 - What the code already says: file tree, dependency list, signatures.
 - The details of a debugging session that ended well.
-- A generality true for any project ("write tests"). It is already
-  in the global `CLAUDE.md`.
+- A generality true for any project ("write tests").
 
-A project page rarely exceeds 60 useful lines. Beyond that, it becomes
-context paid for in every session for information no one ever re-reads.
-
-## Writing
-
-```bash
-V="$HOME/Documents/Obsidian Vault/Claude"
-```
-
-Always read the page before touching it:
-
-```bash
-cat "$V/Projets/<Projet>.md"
-```
-
-Then `Edit` the relevant section. Link pages together with
-`[[Nom de page]]` links — this is what builds the Obsidian graph and lets you
-find a context by following links.
+Only the beginning of a page is injected at session start
+(`node ~/.claude-config/vault-lint.js --project` shows how much). Put what
+matters most first, and replace an outdated note instead of adding a second one
+that contradicts it.
 
 ## Before a compaction
 
 This is the most important moment: afterwards, the details no longer exist.
 
-1. Write in today's journal: what was done, where the work stands, what
-   remains, and any decision made during the session.
-2. Move up into `Projets/<Projet>.md` what is durable (a decision, a
-   pitfall) — the journal is dated, the project page is permanent.
+1. Write in today's journal: what was done, where the work stands, what remains,
+   and any decision made during the session.
+2. Move up into the project page what is durable (a decision, a pitfall) — the
+   journal is dated, the project page is permanent.
 3. Only then, suggest `/compact` to the user.
 
-A compaction done after this writing loses only tokens. Done before,
-it loses information.
+A compaction done after this writing loses only tokens. Done before, it loses
+information.
+
+A structural decision that belongs to a client project repo also deserves an ADR
+in that repo: propose `docs/adr/NNNN-slug.md` from
+`~/.claude-config/rules/templates/adr.md`, and ask before writing into the
+client repo.
