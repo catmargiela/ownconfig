@@ -307,6 +307,16 @@ endroit où Claude Code le donne : elle l'enregistre dans
 (`worksessions.jsonl`, même dossier). Sans `/startsession`, `/endsession` donne
 les chiffres de toute la conversation.
 
+**Entretien d'une page.** `/vault-tidy` relit la page du projet et propose de
+retirer les doublons, les notes contredites par une plus récente, les notes sur
+ce qui a disparu, et de ranger les blocs « Repris de la page … ». Rien n'est
+appliqué sans accord, et le texte d'une note n'est jamais reformulé.
+`node vault-lint.js --refs [dossier]` liste, sans modèle, les fichiers et les
+branches que la page cite et qui n'existent plus sur la machine.
+
+Les journaux sont nommés à la date locale : une session après minuit appartient
+au nouveau jour.
+
 **Historique.** Le dossier `Claude/` du vault est versionné dans un dépôt git
 hors du vault (`~/.claude/state/vault-history.git`) : un commit à chaque fin de
 réponse et avant chaque compaction, quand quelque chose a changé. Local

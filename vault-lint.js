@@ -10,6 +10,7 @@
  *
  *   node vault-lint.js [--verbose]             tout le vault
  *   node vault-lint.js --project [dir] [--show] ce qu'une session reçoit dans `dir`
+ *   node vault-lint.js --refs [dir]            fichiers et branches cités par la page et disparus
  */
 const fs = require('fs');
 const os = require('os');
@@ -82,11 +83,27 @@ function printVault() {
   console.log(`  Session la plus chère : ~${pire} tokens de contexte injecté.\n`);
 }
 
+function printRefs(dir) {
+  const { staleRefs } = require(path.join(HERE, 'hooks', 'lib', 'vault', 'refs.js'));
+  const r = projectReport(dir);
+  if (!r.page) return console.log(`\n  Aucune page pour ${tilde(dir)}.\n`);
+  const dirs = r.paths.length ? r.paths : [dir];
+  const refs = staleRefs(store.read(r.page), dirs);
+  console.log(`\n  Page : Projets/${r.name}.md — ${refs.length} référence(s) introuvable(s) sur cette machine`);
+  for (const x of refs) {
+    console.log(`    l.${x.line} ${x.kind} \`${store.printable(x.token)}\``);
+    console.log(`        ${store.printable(x.text).slice(0, 160)}`);
+  }
+  console.log(refs.length ? '\n  Une référence disparue signale souvent une note périmée — à vérifier, pas à supprimer d\'office.\n' : '');
+}
+
 const st = store.vaultStatus();
 if (!st.ok) { console.error(`Vault inactif : ${store.printable(st.why)}`); process.exit(1); }
 
-const at = ARGS.indexOf('--project');
-if (at >= 0) {
-  const next = ARGS[at + 1];
-  printProject(path.resolve(next && !next.startsWith('--') ? next : process.cwd()));
-} else printVault();
+const dirAfter = (flag) => {
+  const next = ARGS[ARGS.indexOf(flag) + 1];
+  return path.resolve(next && !next.startsWith('--') ? next : process.cwd());
+};
+if (ARGS.includes('--project')) printProject(dirAfter('--project'));
+else if (ARGS.includes('--refs')) printRefs(dirAfter('--refs'));
+else printVault();
