@@ -50,6 +50,7 @@ const SCRIPTS = [
   ['config-doctor.js', path.join(CLAUDE, 'bin', 'config-doctor.js')],
   ['vault-page.js', path.join(CLAUDE, 'bin', 'vault-page.js')],
   ['work-session.js', path.join(CLAUDE, 'bin', 'work-session.js')],
+  ['hud-data.js', path.join(CLAUDE, 'bin', 'hud-data.js')],
 ];
 
 /** Lien symbolique : la source de vérité reste le dépôt, les édits sont immédiats. */

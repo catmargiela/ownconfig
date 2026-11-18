@@ -1,0 +1,9 @@
+{
+  "name": "hud",
+  "description": "HUD above the prompt (context, cost, limits, git, memory) and a pane with the detail: context by category, cost per turn, work session, what the vault injected.",
+  "version": "0.1.0",
+  "author": {
+    "name": "catmargiela"
+  },
+  "types": "./types/index.d.ts"
+}
