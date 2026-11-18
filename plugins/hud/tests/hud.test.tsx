@@ -42,6 +42,7 @@ test('the band and the pane draw the figures', async ($, on) => {
     },
   }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('fs.write', () => ({ value: undefined }))
 
   await $.session.start({ cwd: '/work/acme', surface: 'terminal', isInteractive: true })
 

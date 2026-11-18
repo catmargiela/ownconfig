@@ -101,13 +101,17 @@ else {
   };
   const full = line('sess-9');
   check('sans HUD : barre complète', [full.code, /42%/.test(full.out), /\$3\.42/.test(full.out), /5h 23%/.test(full.out)], [0, true, true, true]);
-  check('hud-data laisse le marqueur de la conversation', fs.existsSync(path.join(STATE, 'sess-1.hud.json')), true);
+  check('hud-data n\'écrit aucun marqueur', fs.existsSync(path.join(STATE, 'sess-1.hud.json')), false);
+  fs.writeFileSync(path.join(STATE, 'sess-1.hud.json'), '{}');
   const short = line('sess-1');
   check('avec HUD : dossier et modèle seulement', [short.code, /acme-shop/.test(short.out), /Fable 5 medium/.test(short.out)], [0, true, true]);
   check('avec HUD : ni jauge, ni coût, ni limites, ni lignes', /42%|\$3\.42|5h|\+12/.test(short.out), false);
   let snap = null;
   try { snap = JSON.parse(fs.readFileSync(path.join(STATE, 'sess-1.cost.json'), 'utf8')); } catch { /* stays null */ }
   check('avec HUD : le coût reste écrit pour /startsession', snap, { cost: 3.42, added: 12, removed: 3 });
+  const old = new Date(Date.now() - 10 * 60 * 1000);
+  fs.utimesSync(path.join(STATE, 'sess-1.hud.json'), old, old);
+  check('marqueur vieux de dix minutes : barre complète à nouveau', /42%/.test(line('sess-1').out), true);
 }
 
 fs.rmSync(TMP, { recursive: true, force: true });

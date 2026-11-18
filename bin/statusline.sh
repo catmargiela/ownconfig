@@ -2,7 +2,7 @@
 # Claude Code statusLine — colored, single line.
 # dir · branch(dirty) · model(effort) · context gauge · 5h + weekly limits · cost · duration · +/- lines
 # · characters saved by output compression in this session
-# Where the `hud` plugin draws its band above the prompt (it leaves <session>.hud.json),
+# Where the `hud` plugin draws its band above the prompt (it keeps <session>.hud.json fresh),
 # the line keeps what the band does not show: dir · model(effort) · compression savings.
 # Offline, no secrets. Reads the statusLine JSON payload from stdin. Its only
 # writes, both under state/ccx/: the usage limits (limits.json, for the
@@ -30,7 +30,8 @@ IFS=$'\x1f' read -r dir model effort ctx cost dur added removed rl5 cache rl7 si
 
 # --- the HUD band already shows git, context, limits, cost and lines in this conversation ---
 hud=0
-[[ "$sid" =~ ^[A-Za-z0-9_-]{1,64}$ ]] && [ -f "$STATE/$sid.hud.json" ] && hud=1
+# The plugin marks the file while its band shows; two minutes without a mark and the line is complete again.
+[[ "$sid" =~ ^[A-Za-z0-9_-]{1,64}$ ]] && [ -n "$(find "$STATE/$sid.hud.json" -maxdepth 0 -mmin -2 2>/dev/null)" ] && hud=1
 
 # --- palette (ANSI) ---
 R=$'\033[0m'; DIM=$'\033[2m'; B=$'\033[1m'

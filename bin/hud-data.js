@@ -7,10 +7,8 @@
  *   node ~/.claude/bin/hud-data.js <session-id> [dir]
  *
  * Prints one JSON object: `{ memory, memoryNote, work }`. Reuses the vault's
- * own modules, so the HUD shows what the hooks compute. Its only write is
- * `<session>.hud.json` under state/ccx/: the sign, for the status line, that
- * the HUD is drawn in this conversation. Always exits 0: a part that cannot be
- * read is left null.
+ * own modules, so the HUD shows what the hooks compute. Read-only. Always
+ * exits 0: a part that cannot be read is left null.
  */
 const fs = require('fs');
 const os = require('os');
@@ -78,14 +76,6 @@ function workOf(sid, dir) {
   };
 }
 
-/** Tells the status line the HUD is drawn in this conversation. Never throws. */
-function markDrawn(sid) {
-  try {
-    fs.mkdirSync(STATE, { recursive: true });
-    fs.writeFileSync(path.join(STATE, `${sid}.hud.json`), JSON.stringify({ at: new Date().toISOString() }));
-  } catch { /* the status line simply stays complete */ }
-}
-
 function main() {
   const [sid, dir] = process.argv.slice(2);
   const cwd = path.resolve(dir || process.cwd());
@@ -97,7 +87,6 @@ function main() {
   } catch (e) { out.memoryNote = `Lecture du vault impossible : ${String(e && e.message)}`; }
   if (SID.test(sid || '')) {
     try { out.work = workOf(sid, cwd); } catch { /* no work-session figures: the HUD says so */ }
-    markDrawn(sid);
   }
   process.stdout.write(JSON.stringify(out) + '\n');
 }

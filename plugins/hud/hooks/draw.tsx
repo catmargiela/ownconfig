@@ -1,4 +1,4 @@
-/** The two drawings: the band above the prompt and the pane. Pure: figures in, tree out. */
+/** The band above the prompt, and the row helpers the pane shares. Pure: figures in, tree out. */
 import type { Color, Elements } from 'claude-code'
 
 import type { Category, Limit, Probe, TurnPoint, Usage } from '../types'
@@ -36,16 +36,16 @@ export type Actions = {
   isBandHidden: boolean
 }
 
-type Seg = { t: string; color?: Color; isDim?: boolean; isBold?: boolean }
+export type Seg = { t: string; color?: Color; isDim?: boolean; isBold?: boolean }
 
-const seg = (t: string, color?: Color, more: { isDim?: boolean; isBold?: boolean } = {}): Seg =>
+export const seg = (t: string, color?: Color, more: { isDim?: boolean; isBold?: boolean } = {}): Seg =>
   color === undefined ? { t, ...more } : { t, color, ...more }
-const dim = (t: string): Seg => ({ t, isDim: true })
-const bold = (t: string, color?: Color): Seg => seg(t, color, { isBold: true })
+export const dim = (t: string): Seg => ({ t, isDim: true })
+export const bold = (t: string, color?: Color): Seg => seg(t, color, { isBold: true })
 const SEP = dim(' │ ')
 
 /** One row, cut at `width` so the band never wraps. */
-function row(ui: Ui, segs: readonly Seg[], width: number) {
+export function row(ui: Ui, segs: readonly Seg[], width: number) {
   const { Box, Text } = ui
   let room = Math.max(1, width)
   const kept: Seg[] = []
@@ -102,8 +102,8 @@ function contextSegs(v: View, cells: number): Seg[] {
 function costSegs(v: View): Seg[] {
   const u = v.usage
   if (!u || u.usd === null) return [dim('coût inconnu')]
-  const costs = turnCosts(v.turns, 0)
-  const last = v.turns.length > 1 ? costs[costs.length - 1] : undefined
+  const costs = turnCosts(v.turns)
+  const last = costs[costs.length - 1]
   const rate = burn(u.usd, u.startedAt, v.now)
   return [
     bold(usd(u.usd)),
@@ -112,13 +112,14 @@ function costSegs(v: View): Seg[] {
   ]
 }
 
+function gitSegs(p: Probe | null): Seg[] {
+  if (!p?.branch) return []
+  return [seg(`⎇ ${p.branch}`, 'suggestion'), ...(p.dirty > 0 ? [seg(` ●${p.dirty}`, 'warning')] : [])]
+}
+
 function placeSegs(p: Probe | null, now: number): Seg[] {
   if (!p) return []
-  const out: Seg[] = []
-  if (p.branch) {
-    out.push(SEP, seg(`⎇ ${p.branch}`, 'suggestion'))
-    if (p.dirty > 0) out.push(seg(` ●${p.dirty}`, 'warning'))
-  }
+  const out: Seg[] = p.branch ? [SEP, ...gitSegs(p)] : []
   if (p.memory?.hasPage) {
     out.push(SEP, seg('◆ ', 'claude'), seg(`mémoire ${p.memory.mode}`))
     if (p.memory.staleRefs > 0) out.push(seg(` ⚠ ${p.memory.staleRefs}`, 'warning'))
@@ -140,7 +141,7 @@ function categorySegs(v: View): Seg[] {
 function costDetailSegs(v: View): Seg[] {
   const u = v.usage
   if (!u || u.usd === null) return [dim('coût inconnu')]
-  const costs = turnCosts(v.turns, 0).slice(1)
+  const costs = turnCosts(v.turns)
   const last = v.turns[v.turns.length - 1]
   const lastCost = costs[costs.length - 1]
   const rate = burn(u.usd, u.startedAt, v.now)
@@ -158,12 +159,7 @@ function costDetailSegs(v: View): Seg[] {
 function workSegs(v: View): Seg[] {
   const p = v.probe
   const w = p?.work ?? null
-  const out: Seg[] = []
-  if (p?.branch) {
-    out.push(seg(`⎇ ${p.branch}`, 'suggestion'))
-    if (p.dirty > 0) out.push(seg(` ●${p.dirty}`, 'warning'))
-    out.push(SEP)
-  }
+  const out: Seg[] = p?.branch ? [...gitSegs(p), SEP] : []
   const started = w?.isOpen && w.startedAt ? Date.parse(w.startedAt) : NaN
   if (w && Number.isFinite(started)) {
     const spent = v.usage?.usd != null ? Math.max(0, v.usage.usd - w.baseUsd) : null
@@ -208,205 +204,15 @@ export function band(ui: Ui, v: View, width: number, rows: number) {
   const cells = width >= 120 ? 8 : 0
   const five = limitSegs(pickLimit(limits, 'five_hour'), v.now, cells)
   const seven = limitSegs(pickLimit(limits, 'seven_day'), v.now, cells)
-  if (rows < 2) return row(ui, [...contextSegs(v, 10), SEP, ...costSegs(v), ...five], width)
+  if (rows < 2) return row(ui, [...contextSegs(v, 10), SEP, ...costSegs(v), ...five, ...placeSegs(v.probe, v.now)], width)
+  // The branch lives on the fourth row: a shorter band shows it on the second.
+  const git = rows < 4 && v.probe?.branch ? [SEP, ...gitSegs(v.probe)] : []
   const all = [
     [tag('CTX'), ...contextSegs(v, width >= 120 ? 28 : 12).slice(1)],
-    [tag('COÛT'), ...costDetailSegs(v), ...five, ...seven],
+    [tag('COÛT'), ...costDetailSegs(v), ...five, ...seven, ...git],
     [tag('QUOI'), ...categorySegs(v)],
     [tag('TRAV.'), ...workSegs(v)],
     [tag('MÉMO'), ...memorySegs(v)],
   ]
   return <Box flexDirection="column">{all.slice(0, Math.max(2, rows)).map(segs => row(ui, segs, width))}</Box>
-}
-
-function title(ui: Ui, text: string, width: number) {
-  return row(ui, [bold(`── ${text} `, 'claude'), seg('─'.repeat(Math.max(0, width - text.length - 4)), 'claude', { isDim: true })], width)
-}
-
-function contextRows(ui: Ui, v: View, width: number) {
-  const u = v.usage
-  const percent = u?.percent ?? null
-  const color = tone(percent)
-  const left = turnsLeft(v.turns, percent)
-  const used = [...v.categories].sort((a, b) => b.tokens - a.tokens).slice(0, 7)
-  const top = used[0]?.tokens ?? 0
-  const barRoom = Math.max(4, width - 30)
-  return [
-    title(ui, 'CONTEXTE', width),
-    row(ui, [seg(`${gauge(percent, Math.max(8, width - 7))} `, color), bold(percent === null ? '—' : `${Math.round(percent)} %`, color)], width),
-    row(
-      ui,
-      u && u.tokens !== null
-        ? [seg(`${tokens(u.tokens)} sur ${tokens(u.window)} tokens`), dim(` · reste ${tokens(Math.max(0, u.window - u.tokens))}`)]
-        : [dim('Pas encore de mesure : elle arrive avec la première réponse.')],
-      width,
-    ),
-    ...(v.turns.length > 1
-      ? [row(ui, [dim('Par tour  '), seg(spark(v.turns.slice(-Math.max(8, width - 12)).map(t => t.percent), 100), color)], width)]
-      : []),
-    row(
-      ui,
-      [dim(left === null ? `Alerte à ${WARN_PERCENT} % : écrire dans le vault, puis /compact.` : `À ce rythme, ${WARN_PERCENT} % dans environ ${left} tours.`)],
-      width,
-    ),
-    ...used.map(c =>
-      row(
-        ui,
-        [
-          seg(c.name.slice(0, 18).padEnd(19)),
-          seg('█'.repeat(top > 0 ? Math.max(1, Math.round((c.tokens / top) * barRoom)) : 0), 'suggestion'),
-          dim(` ${tokens(c.tokens)}`),
-        ],
-        width,
-      ),
-    ),
-  ]
-}
-
-function costRows(ui: Ui, v: View, width: number) {
-  const u = v.usage
-  const costs = turnCosts(v.turns, 0).slice(1)
-  const last = v.turns[v.turns.length - 1]
-  const lastCost = costs[costs.length - 1]
-  const rate = u ? burn(u.usd, u.startedAt, v.now) : null
-  const mean = costs.length ? costs.reduce((a, b) => a + b, 0) / costs.length : null
-  return [
-    title(ui, 'COÛT', width),
-    row(
-      ui,
-      u && u.usd !== null
-        ? [
-            bold(usd(u.usd)),
-            dim(` depuis ${span(v.now - u.startedAt)}`),
-            ...(rate === null ? [] : [dim(` · ${usd(rate)}/h`)]),
-            ...(mean === null ? [] : [dim(` · ${usd(mean)} par tour`)]),
-          ]
-        : [dim('Coût inconnu.')],
-      width,
-    ),
-    ...(costs.length > 1 ? [row(ui, [dim('Par tour  '), seg(spark(costs.slice(-Math.max(8, width - 12))), 'warning')], width)] : []),
-    ...(last && lastCost !== undefined
-      ? [row(ui, [dim(`Dernier tour : ${usd(lastCost)}, ${span(last.seconds * 1000)}, ${last.tools} outil(s)`)], width)]
-      : []),
-  ]
-}
-
-function limitRows(ui: Ui, v: View, width: number) {
-  const limits = v.usage?.limits ?? []
-  if (!limits.length) return []
-  return [
-    title(ui, 'LIMITES', width),
-    ...limits.map(l => {
-      const left = until(l.resetsAt, v.now)
-      return row(
-        ui,
-        [
-          seg(limitName(l.kind).padEnd(5)),
-          seg(`${gauge(l.percent, Math.max(6, Math.min(24, width - 34)))} `, tone(l.percent)),
-          bold(`${Math.round(l.percent)} %`, tone(l.percent)),
-          ...(left ? [dim(`  remise à zéro dans ${left}`)] : []),
-        ],
-        width,
-      )
-    }),
-  ]
-}
-
-function workRows(ui: Ui, v: View, width: number, actions: Actions) {
-  const { Box, Button } = ui
-  const w = v.probe?.work ?? null
-  const started = w?.isOpen && w.startedAt ? Date.parse(w.startedAt) : NaN
-  const spent = w && v.usage?.usd != null ? Math.max(0, v.usage.usd - w.baseUsd) : null
-  const prev = w?.previous ?? null
-  const bilan = prev?.bilan ? prev.bilan.split('\n').filter(l => l.trim()).slice(0, 8) : []
-  return [
-    title(ui, 'SESSION DE TRAVAIL', width),
-    row(
-      ui,
-      w?.isOpen && Number.isFinite(started)
-        ? [
-            seg('● ', 'success'),
-            seg(`Ouverte le ${clock(w.startedAt)} · ${span(v.now - started)}`),
-            ...(spent === null ? [] : [bold(` · ${usd(spent)}`)]),
-            seg(` · +${w.added}`, 'success'),
-            seg(` −${w.removed}`, 'error'),
-          ]
-        : [dim('Aucune session ouverte dans cette conversation.')],
-      width,
-    ),
-    <Box flexDirection="row">
-      {w?.isOpen ? (
-        <Button key="end" label="Terminer la session" variant="primary" onPress={() => actions.onWorkSession('/endsession')} />
-      ) : (
-        <Button key="start" label="Démarrer une session" variant="primary" onPress={() => actions.onWorkSession('/startsession')} />
-      )}
-    </Box>,
-    ...(prev
-      ? [
-          row(
-            ui,
-            [
-              dim('Précédente : '),
-              seg(`${clock(prev.startedAt)}${prev.endedAt ? ` → ${clock(prev.endedAt)}` : ' (jamais fermée)'}`),
-              ...(prev.usd === null ? [] : [bold(` · ${usd(prev.usd)}`)]),
-            ],
-            width,
-          ),
-          ...bilan.map(l => row(ui, [dim(`  ${l}`)], width)),
-        ]
-      : [row(ui, [dim('Pas de session précédente sur ce projet.')], width)]),
-  ]
-}
-
-function memoryRows(ui: Ui, v: View, width: number) {
-  const p = v.probe
-  const m = p?.memory ?? null
-  if (!m) return [title(ui, 'MÉMOIRE', width), row(ui, [dim(p?.memoryNote || 'Pas encore lue.')], width)]
-  if (!m.hasPage) {
-    return [
-      title(ui, 'MÉMOIRE', width),
-      row(ui, [seg('◇ ', 'warning'), seg(`Aucune page pour ce dossier${m.why ? ` : ${m.why}` : '.'}`)], width),
-      row(ui, [dim('Les notes vont dans le journal du jour.')], width),
-    ]
-  }
-  const how =
-    m.mode === 'sommaire'
-      ? `en sommaire : la page dépasse ${m.budget} caractères`
-      : m.mode === 'entier'
-        ? 'en entier'
-        : 'vide : rien à injecter'
-  return [
-    title(ui, 'MÉMOIRE', width),
-    row(ui, [seg('◆ ', 'claude'), bold(m.name), dim(` · injectée ${how}`)], width),
-    row(ui, [dim(`${m.written} car. écrits, ${m.injected} injectés · environ ${tokens(m.startTokens)} tokens au démarrage`)], width),
-    row(ui, [dim('Dernière session : '), seg(m.hasLastSession ? 'injectée' : 'aucune', m.hasLastSession ? 'success' : 'inactive')], width),
-    ...m.sections.map(s => row(ui, [dim('  § '), seg(s)], width)),
-    ...(m.staleRefs > 0
-      ? [row(ui, [seg(`⚠ ${m.staleRefs} fichier(s) ou branche(s) cités qui n'existent plus — /vault-tidy`, 'warning')], width)]
-      : []),
-  ]
-}
-
-/** The pane: every figure of the band, with its detail. */
-export function pane(ui: Ui, v: View, width: number, actions: Actions) {
-  const { Box, Button } = ui
-  const gap = row(ui, [seg(' ')], width)
-  return (
-    <Box flexDirection="column">
-      {contextRows(ui, v, width)}
-      {gap}
-      {costRows(ui, v, width)}
-      {limitRows(ui, v, width)}
-      {gap}
-      {workRows(ui, v, width, actions)}
-      {gap}
-      {memoryRows(ui, v, width)}
-      {gap}
-      <Box flexDirection="row" gap={1}>
-        <Button key="refresh" label="Rafraîchir" hotkey="r" onPress={actions.onRefresh} />
-        <Button key="band" label={actions.isBandHidden ? 'Afficher le bandeau' : 'Masquer le bandeau'} hotkey="b" onPress={actions.onToggleBand} />
-      </Box>
-      {row(ui, [dim(v.probe ? `Relevé il y a ${span(v.now - v.probe.at)}.` : '')], width)}
-    </Box>
-  )
 }

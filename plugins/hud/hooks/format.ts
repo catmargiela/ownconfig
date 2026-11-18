@@ -63,9 +63,13 @@ export function pickLimit(limits: readonly Limit[], kind: string): Limit | null 
   return limits.find(l => l.kind === kind) ?? null
 }
 
-/** Cost of each turn: the difference between consecutive totals. */
-export function turnCosts(turns: readonly TurnPoint[], firstBase: number): number[] {
-  return turns.map((t, i) => Math.max(0, t.usd - (turns[i - 1]?.usd ?? firstBase)))
+/**
+ * Cost of each turn but the first recorded one: the difference between
+ * consecutive totals. The first point only carries what the session had
+ * already cost when the HUD started counting, so it is not a turn's cost.
+ */
+export function turnCosts(turns: readonly TurnPoint[]): number[] {
+  return turns.slice(1).map((t, i) => Math.max(0, t.usd - (turns[i]?.usd ?? t.usd)))
 }
 
 /**
