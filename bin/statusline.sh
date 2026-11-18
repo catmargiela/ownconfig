@@ -2,6 +2,8 @@
 # Claude Code statusLine — colored, single line.
 # dir · branch(dirty) · model(effort) · context gauge · 5h + weekly limits · cost · duration · +/- lines
 # · characters saved by output compression in this session
+# Where the `hud` plugin draws its band above the prompt (it keeps <session>.hud.json fresh),
+# the line keeps what the band does not show: dir · model(effort) · compression savings.
 # Offline, no secrets. Reads the statusLine JSON payload from stdin. Its only
 # writes, both under state/ccx/: the usage limits (limits.json, for the
 # quota-alert hook) and the cost of the conversation (<session>.cost.json, for
@@ -25,6 +27,11 @@ IFS=$'\x1f' read -r dir model effort ctx cost dur added removed rl5 cache rl7 si
    (.rate_limits.five_hour.resets_at // ""),
    (.rate_limits.seven_day.resets_at // "")] | map(tostring) | join("\u001f")
 ')"
+
+# --- the HUD band already shows git, context, limits, cost and lines in this conversation ---
+hud=0
+# The plugin marks the file while its band shows; two minutes without a mark and the line is complete again.
+[[ "$sid" =~ ^[A-Za-z0-9_-]{1,64}$ ]] && [ -n "$(find "$STATE/$sid.hud.json" -maxdepth 0 -mmin -2 2>/dev/null)" ] && hud=1
 
 # --- palette (ANSI) ---
 R=$'\033[0m'; DIM=$'\033[2m'; B=$'\033[1m'
@@ -54,7 +61,7 @@ gauge() {
 out="${B}${BLUE}$(basename "${dir:-.}")${R}"
 
 # --- git: branch + number of changed files ---
-if [ -n "$dir" ] && git -C "$dir" --no-optional-locks rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+if [ "$hud" = 0 ] && [ -n "$dir" ] && git -C "$dir" --no-optional-locks rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   branch=$(git -C "$dir" --no-optional-locks branch --show-current 2>/dev/null)
   [ -z "$branch" ] && branch=$(git -C "$dir" --no-optional-locks rev-parse --short HEAD 2>/dev/null)
   dirty=$(git -C "$dir" --no-optional-locks status --porcelain 2>/dev/null | wc -l | tr -d ' ')
@@ -71,7 +78,7 @@ if [ -n "$model" ]; then
 fi
 
 # --- context gauge ---
-if [ -n "$ctx" ]; then
+if [ "$hud" = 0 ] && [ -n "$ctx" ]; then
   c=$(level_color "$ctx")
   out+="${SEP}${c}$(gauge "$ctx") $(printf '%.0f' "$ctx")%${R}"
 fi
@@ -88,10 +95,10 @@ if [ -n "$rl7" ]; then
   [ -n "$lim" ] && lim+="${GREY} · ${R}"
   lim+="$(limit_seg 7j "$rl7")"
 fi
-[ -n "$lim" ] && out+="${SEP}${lim}"
+[ "$hud" = 0 ] && [ -n "$lim" ] && out+="${SEP}${lim}"
 
 # --- cost + duration ---
-if [ -n "$cost" ]; then
+if [ "$hud" = 0 ] && [ -n "$cost" ]; then
   seg="${GREEN}\$$(printf '%.2f' "$cost")${R}"
   if [ -n "$dur" ]; then
     s=$(( ${dur%.*} / 1000 )); h=$(( s / 3600 )); m=$(( s % 3600 / 60 ))
@@ -101,7 +108,7 @@ if [ -n "$cost" ]; then
 fi
 
 # --- lines changed ---
-if [ -n "$added$removed" ] && [ "${added:-0}${removed:-0}" != "00" ]; then
+if [ "$hud" = 0 ] && [ -n "$added$removed" ] && [ "${added:-0}${removed:-0}" != "00" ]; then
   out+="${SEP}${GREEN}+${added:-0}${R}${GREY}/${R}${RED}-${removed:-0}${R}"
 fi
 

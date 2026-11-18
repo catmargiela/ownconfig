@@ -13,6 +13,11 @@
       "name": "ccx",
       "source": "./plugins/ccx",
       "description": "Garde-fous ccx en hooks natifs : secrets, contournement git, commandes destructives, serveurs de dev, configs de lint, hygiène Bash, boucles ; contexte, quota, livraison et notification de fin de tour sur les chiffres de l'API."
+    },
+    {
+      "name": "hud",
+      "source": "./plugins/hud",
+      "description": "HUD au-dessus du prompt : contexte, coût, limites, ce qui remplit le contexte, session de travail, mémoire du vault ; panneau /hud pour le détail."
     }
   ],
   "metadata": {
