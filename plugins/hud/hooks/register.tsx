@@ -13,6 +13,7 @@ import { probe as readProbe } from './probe'
 
 const PANE = 'hud'
 const TICK_MS = 30_000
+const FIRST_MARK_MS = 2_000
 const MAX_TURNS = 120
 const SID = /^[A-Za-z0-9_-]{1,64}$/
 
@@ -90,6 +91,7 @@ export const register: Register = on => {
   let lastBandError = 'aucune'
   let isBandDrawn = false
   let tick: { cancel: () => void } | null = null
+  let firstMark: { cancel: () => void } | null = null
 
   on('session.start', async ($, e, next) => {
     await $.command.register({
@@ -106,6 +108,11 @@ export const register: Register = on => {
       isBandDrawn = false
       await update($, now, () => t)
       if (wasDrawn) await markDrawn($)
+    })
+    // The status line shortens two seconds after the start, not at the first beat.
+    firstMark?.cancel()
+    firstMark = $.clock.after(FIRST_MARK_MS, async () => {
+      if (isBandDrawn) await markDrawn($)
     })
 
     return next(e)
