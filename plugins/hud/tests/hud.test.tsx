@@ -1,4 +1,4 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 
 const USAGE = {
   startedAt: 0,
@@ -25,8 +25,7 @@ test('the band and the pane draw the figures', async ($, on) => {
   on('session.id', () => ({ value: 'abc' }))
   on('session.cwd', () => ({ value: '/work/acme' }))
   on('env.get', () => ({ value: '/home/someone' }))
-  on('clock.now', () => ({ value: Date.parse('2026-11-18T11:04:00.000Z') }))
-  on('clock.every', () => ({ value: undefined }))
+  const clock = mock.clock(on, { now: Date.parse('2026-11-18T11:04:00.000Z') })
   on('process.run', (_, e) => ({
     value: {
       exitCode: 0,
@@ -42,7 +41,12 @@ test('the band and the pane draw the figures', async ($, on) => {
     },
   }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
-  on('fs.write', () => ({ value: undefined }))
+  const written: string[] = []
+  on('fs.write', (_, e) => {
+    written.push(e.path)
+
+    return { value: undefined }
+  })
 
   await $.session.start({ cwd: '/work/acme', surface: 'terminal', isInteractive: true })
 
@@ -55,6 +59,10 @@ test('the band and the pane draw the figures', async ($, on) => {
   expect(await bandUi.find({ type: 'Text', text: /session ouverte .* 1 h 04/ })).toBeDefined()
   expect(await bandUi.find({ type: 'Text', text: /Acme/ })).toBeDefined()
   expect(await bandUi.find({ type: 'Text', text: /3 réf\. disparues/ })).toBeDefined()
+  // Two seconds after the start the status line is told, without waiting for a beat.
+  expect(written).toEqual([])
+  await clock.advance(2_000)
+  expect(written).toEqual(['/home/someone/.claude/state/ccx/abc.hud.json'])
   await bandUi.unmount()
 
   const paneUi = await $.ui.mount({
